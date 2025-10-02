@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
@@ -8,6 +9,7 @@ using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
+using Codeful.Models;
 using Codeful.Services;
 
 namespace Codeful
@@ -18,13 +20,21 @@ namespace Codeful
     public partial class MainWindow : Window
     {
         private readonly GroqService _groqService;
+        private readonly ChatStorageService _chatStorage;
         private TextBlock? _currentThinkingText;
+        private ChatData _currentChat;
+        private List<ChatData> _allChats;
 
         public MainWindow()
         {
             InitializeComponent();
             _groqService = new GroqService();
+            _chatStorage = new ChatStorageService();
+            _currentChat = new ChatData();
+            _allChats = new List<ChatData>();
+            
             MessageInput.Focus();
+            _ = LoadChatHistoryAsync();
         }
 
         private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -80,6 +90,176 @@ namespace Codeful
             return null;
         }
 
+        private async Task LoadChatHistoryAsync()
+        {
+            try
+            {
+                // Load chats on background thread
+                var chats = await _chatStorage.LoadAllChatsAsync();
+                
+                // Update UI on UI thread
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    _allChats = chats;
+                    UpdateChatHistoryDisplay();
+                });
+            }
+            catch (Exception ex)
+            {
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    MessageBox.Show($"Error loading chat history: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                });
+            }
+        }
+
+        private void UpdateChatHistoryDisplay()
+        {
+            ChatHistoryPanel.Children.Clear();
+
+            foreach (var chat in _allChats)
+            {
+                var chatCard = CreateChatCard(chat);
+                ChatHistoryPanel.Children.Add(chatCard);
+            }
+        }
+
+        private Border CreateChatCard(ChatData chat)
+        {
+            var border = new Border
+            {
+                Style = (Style)FindResource("ChatCardStyle"),
+                Tag = chat
+            };
+
+            var grid = new Grid();
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var contentStack = new StackPanel();
+
+            var titleText = new TextBlock
+            {
+                Text = chat.DisplayTitle,
+                FontWeight = FontWeights.Medium,
+                FontSize = 13,
+                Foreground = (SolidColorBrush)FindResource("ForegroundBrush"),
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                Margin = new Thickness(0, 0, 0, 4)
+            };
+
+            var timestampText = new TextBlock
+            {
+                Text = chat.FormattedLastMessage,
+                FontSize = 11,
+                Foreground = (SolidColorBrush)FindResource("SecondaryTextBrush")
+            };
+
+            contentStack.Children.Add(titleText);
+            contentStack.Children.Add(timestampText);
+
+            var deleteButton = new Button
+            {
+                Style = (Style)FindResource("ChatDeleteButtonStyle"),
+                Tag = chat
+            };
+
+            var deletePath = new Path
+            {
+                Data = (Geometry)FindResource("CloseIcon"),
+                Fill = new SolidColorBrush(Colors.Gray),
+                Width = 10,
+                Height = 10,
+                Stretch = Stretch.Uniform
+            };
+
+            deleteButton.Content = deletePath;
+            deleteButton.Click += DeleteChatButton_Click;
+
+            grid.Children.Add(contentStack);
+            Grid.SetColumn(contentStack, 0);
+            grid.Children.Add(deleteButton);
+            Grid.SetColumn(deleteButton, 1);
+
+            border.Child = grid;
+            border.MouseLeftButtonDown += ChatCard_Click;
+
+            return border;
+        }
+
+        private void ChatCard_Click(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is Border border && border.Tag is ChatData chat)
+            {
+                LoadChat(chat);
+            }
+        }
+
+        private async void DeleteChatButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button button && button.Tag is ChatData chat)
+            {
+                var result = MessageBox.Show($"Are you sure you want to delete this chat?\n\n\"{chat.DisplayTitle}\"", 
+                    "Delete Chat", MessageBoxButton.YesNo, MessageBoxImage.Question);
+
+                if (result == MessageBoxResult.Yes)
+                {
+                    await _chatStorage.DeleteChatAsync(chat.Id);
+                    
+                    // If this was the current chat, start a new one
+                    if (_currentChat.Id == chat.Id)
+                    {
+                        _currentChat = new ChatData();
+                        ChatMessagesPanel.Children.Clear();
+                    }
+
+                    // Refresh chat history
+                    await LoadChatHistoryAsync();
+                }
+            }
+        }
+
+        private void LoadChat(ChatData chat)
+        {
+            _currentChat = chat;
+            ChatMessagesPanel.Children.Clear();
+
+            foreach (var message in chat.Messages)
+            {
+                if (message.IsUser)
+                {
+                    AddUserMessage(message.Content);
+                }
+                else
+                {
+                    var aiResponse = new Services.AiResponse
+                    {
+                        ThinkingProcess = message.ThinkingProcess ?? string.Empty,
+                        Conclusion = message.Content
+                    };
+                    AddAiResponseWithThinking(aiResponse);
+                }
+            }
+        }
+
+        private async Task SaveCurrentChat()
+        {
+            try
+            {
+                await _chatStorage.SaveChatAsync(_currentChat);
+                
+                // Refresh chat history if this is a new chat
+                if (!_allChats.Any(c => c.Id == _currentChat.Id))
+                {
+                    await LoadChatHistoryAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Error saving chat: {ex.Message}");
+            }
+        }
+
         private void CloseButton_Click(object sender, RoutedEventArgs e)
         {
             Application.Current.Shutdown();
@@ -87,6 +267,9 @@ namespace Codeful
 
         private void NewChatButton_Click(object sender, RoutedEventArgs e)
         {
+            // Create new chat
+            _currentChat = new ChatData();
+            
             // Clear chat messages
             ChatMessagesPanel.Children.Clear();
             MessageInput.Focus();
@@ -94,8 +277,67 @@ namespace Codeful
 
         private void SettingsButton_Click(object sender, RoutedEventArgs e)
         {
-            // Placeholder for settings functionality
-            MessageBox.Show("Settings functionality would go here.", "Settings", MessageBoxButton.OK, MessageBoxImage.Information);
+            ShowSettingsModal();
+        }
+
+        private void CloseModalButton_Click(object sender, RoutedEventArgs e)
+        {
+            HideSettingsModal();
+        }
+
+        private void ShowSettingsModal()
+        {
+            SettingsModalOverlay.Visibility = Visibility.Visible;
+        }
+
+        private void HideSettingsModal()
+        {
+            SettingsModalOverlay.Visibility = Visibility.Collapsed;
+        }
+
+        private async void DeleteAllDataButton_Click(object sender, RoutedEventArgs e)
+        {
+            var result = MessageBox.Show(
+                "Are you sure you want to delete ALL chat data?\n\nThis action cannot be undone and will permanently remove all your saved conversations.",
+                "Delete All Data",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+
+            if (result == MessageBoxResult.Yes)
+            {
+                var confirmResult = MessageBox.Show(
+                    "This is your final warning.\n\nClick YES to permanently delete all your chat data.",
+                    "Final Confirmation",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Stop);
+
+                if (confirmResult == MessageBoxResult.Yes)
+                {
+                    try
+                    {
+                        // Delete all chats
+                        await _chatStorage.DeleteAllChatsAsync();
+                        
+                        // Clear current chat
+                        _currentChat = new ChatData();
+                        ChatMessagesPanel.Children.Clear();
+                        
+                        // Refresh chat history (should be empty now)
+                        await LoadChatHistoryAsync();
+                        
+                        // Hide settings modal
+                        HideSettingsModal();
+                        
+                        MessageBox.Show("All chat data has been deleted.", "Data Deleted", 
+                            MessageBoxButton.OK, MessageBoxImage.Information);
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show($"Error deleting data: {ex.Message}", "Error", 
+                            MessageBoxButton.OK, MessageBoxImage.Error);
+                    }
+                }
+            }
         }
 
         private void SendButton_Click(object sender, RoutedEventArgs e)
@@ -180,8 +422,17 @@ namespace Codeful
 
             try
             {
-                // Add user message
+                // Add user message to UI
                 AddUserMessage(messageText);
+                
+                // Add user message to current chat
+                var userMessage = new ChatMessage
+                {
+                    Content = messageText,
+                    IsUser = true,
+                    Timestamp = DateTime.Now
+                };
+                _currentChat.Messages.Add(userMessage);
 
                 // Clear input
                 MessageInput.Text = string.Empty;
@@ -208,6 +459,19 @@ namespace Codeful
 
                 // Add final AI response with thinking and conclusion
                 AddAiResponseWithThinking(response);
+                
+                // Add AI message to current chat
+                var aiMessage = new ChatMessage
+                {
+                    Content = response.Conclusion,
+                    IsUser = false,
+                    Timestamp = DateTime.Now,
+                    ThinkingProcess = response.ThinkingProcess
+                };
+                _currentChat.Messages.Add(aiMessage);
+                
+                // Auto-save chat after AI response
+                await SaveCurrentChat();
 
                 // Scroll to bottom
                 ChatScrollViewer.ScrollToEnd();

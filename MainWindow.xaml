@@ -231,6 +231,121 @@
                     </Border>
                 </Border>
             </Grid>
+            
+            <!-- Settings Modal Overlay -->
+            <Grid Name="SettingsModalOverlay" 
+                  Grid.ColumnSpan="2"
+                  Background="#80000000" 
+                  Visibility="Collapsed">
+            <Border Background="{StaticResource BackgroundBrush}"
+                    CornerRadius="20"
+                    Width="500"
+                    Height="400"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    BorderThickness="1"
+                    BorderBrush="{StaticResource BorderBrush}"
+                    Effect="{StaticResource WindowDropShadow}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    
+                    <!-- Modal Header -->
+                    <Grid Grid.Row="0" Margin="24,20,20,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        
+                        <TextBlock Grid.Column="0"
+                                   Text="Settings"
+                                   FontSize="20"
+                                   FontWeight="SemiBold"
+                                   Foreground="{StaticResource ForegroundBrush}"
+                                   VerticalAlignment="Center"/>
+                        
+                        <Button Grid.Column="1"
+                                Name="CloseModalButton"
+                                Style="{StaticResource CloseButtonStyle}"
+                                Width="32" Height="32"
+                                Click="CloseModalButton_Click">
+                            <Path Data="{StaticResource CloseIcon}" 
+                                  Fill="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}" 
+                                  Width="14" Height="14"
+                                  Stretch="Uniform"
+                                  VerticalAlignment="Center"
+                                  HorizontalAlignment="Center"/>
+                        </Button>
+                    </Grid>
+                    
+                    <!-- Modal Content -->
+                    <ScrollViewer Grid.Row="1" 
+                                  Margin="24,16,24,24"
+                                  VerticalScrollBarVisibility="Auto">
+                        <StackPanel>
+                            <!-- Data Management Section -->
+                            <TextBlock Text="Data Management"
+                                       FontSize="16"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource ForegroundBrush}"
+                                       Margin="0,0,0,12"/>
+                            
+                            <Grid Margin="0,0,0,16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="Delete all data"
+                                               FontSize="14"
+                                               Foreground="{StaticResource ForegroundBrush}"
+                                               Margin="0,0,0,4"/>
+                                    <TextBlock Text="This will permanently delete all your saved chats and cannot be undone."
+                                               FontSize="12"
+                                               Foreground="{StaticResource SecondaryTextBrush}"
+                                               TextWrapping="Wrap"/>
+                                </StackPanel>
+                                
+                                <Button Grid.Column="1"
+                                        Name="DeleteAllDataButton"
+                                        Content="Delete"
+                                        Background="#FF4444"
+                                        Foreground="White"
+                                        Padding="16,8"
+                                        FontSize="13"
+                                        FontWeight="Medium"
+                                        BorderThickness="0"
+                                        Margin="16,0,0,0"
+                                        Click="DeleteAllDataButton_Click"
+                                        Style="{x:Null}">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Background="{TemplateBinding Background}"
+                                                    CornerRadius="6"
+                                                    Padding="{TemplateBinding Padding}">
+                                                <ContentPresenter HorizontalAlignment="Center" 
+                                                                VerticalAlignment="Center"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter Property="Background" Value="#FF6666"/>
+                                                </Trigger>
+                                                <Trigger Property="IsPressed" Value="True">
+                                                    <Setter Property="Background" Value="#CC3333"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+                            </Grid>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+            </Grid>
         </Grid>
     </Border>
 </Window>
