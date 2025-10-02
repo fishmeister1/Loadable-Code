@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -318,7 +319,7 @@ namespace Codeful
                 ChatScrollViewer.ScrollToEnd();
                 
                 // Animate thinking text
-                await AnimateText(thinkingText, response.ThinkingProcess, 12);
+                await AnimateText(thinkingText, response.ThinkingProcess, 10);
             }
 
             // Add conclusion label
@@ -351,7 +352,7 @@ namespace Codeful
             ChatScrollViewer.ScrollToEnd();
             
             // Animate conclusion text with rich formatting
-            await AnimateRichText(conclusionRichText, response.Conclusion, 8);
+            await AnimateRichText(conclusionRichText, response.Conclusion, 15);
         }
 
         private void AddAiResponse(string text)
@@ -389,73 +390,256 @@ namespace Codeful
                 return;
             }
 
+            // Create the final formatted document once
+            var finalDocument = CreateFormattedDocument(fullText);
+            
+            // Create a temporary document for animation
             richTextBox.Document.Blocks.Clear();
+            
+            // Simple character-by-character animation using plain text
+            // to avoid recreating formatted documents repeatedly
+            var tempParagraph = new Paragraph();
+            richTextBox.Document.Blocks.Add(tempParagraph);
             
             for (int i = 0; i <= fullText.Length; i++)
             {
                 await Task.Delay(delayMs);
                 string currentText = fullText.Substring(0, i);
                 
-                // Create formatted document
-                richTextBox.Document = CreateFormattedDocument(currentText);
+                // Update the paragraph with plain text during animation
+                tempParagraph.Inlines.Clear();
+                tempParagraph.Inlines.Add(new Run(currentText));
                 
                 // Scroll to bottom during animation
                 ChatScrollViewer.ScrollToEnd();
             }
+            
+            // Replace with fully formatted document at the end
+            richTextBox.Document = finalDocument;
+            ChatScrollViewer.ScrollToEnd();
         }
         
         private FlowDocument CreateFormattedDocument(string text)
         {
             var document = new FlowDocument();
-            var paragraph = new Paragraph();
             
-            // Parse text for code blocks (```...```)
-            var parts = System.Text.RegularExpressions.Regex.Split(text, @"(```[\s\S]*?```)");
+            var currentIndex = 0;
+            var codeBlockRegex = new System.Text.RegularExpressions.Regex(@"```[\s\S]*?```", System.Text.RegularExpressions.RegexOptions.Multiline);
+            var matches = codeBlockRegex.Matches(text);
             
-            foreach (var part in parts)
+            foreach (System.Text.RegularExpressions.Match match in matches)
             {
-                if (part.StartsWith("```") && part.EndsWith("```") && part.Length > 6)
+                // Process text before this code block
+                if (match.Index > currentIndex)
                 {
-                    // This is a code block
-                    var codeText = part.Substring(3, part.Length - 6).Trim();
-                    
-                    // Create code block container
-                    var codeContainer = new BlockUIContainer();
-                    var codeBorder = new Border
+                    var textBefore = text.Substring(currentIndex, match.Index - currentIndex);
+                    if (!string.IsNullOrWhiteSpace(textBefore))
                     {
-                        Style = (Style)FindResource("CodeBlockStyle")
-                    };
-                    
-                    var codeTextBlock = new TextBlock
-                    {
-                        Text = codeText,
-                        FontFamily = new FontFamily("Consolas, Courier New"),
-                        FontSize = 13,
-                        Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#333333")),
-                        TextWrapping = TextWrapping.Wrap
-                    };
-                    
-                    codeBorder.Child = codeTextBlock;
-                    codeContainer.Child = codeBorder;
-                    document.Blocks.Add(codeContainer);
-                    
-                    // Start new paragraph after code block
-                    paragraph = new Paragraph();
+                        ProcessRegularText(textBefore, document);
+                    }
                 }
-                else if (!string.IsNullOrEmpty(part))
+                
+                // Process the code block
+                var fullCodeBlock = match.Value;
+                if (fullCodeBlock.Length > 6)
                 {
-                    // Regular text
-                    paragraph.Inlines.Add(new Run(part));
+                    // Extract code content (remove ``` from start and end)
+                    var codeContent = fullCodeBlock.Substring(3, fullCodeBlock.Length - 6);
+                    
+                    // Remove language identifier if present (first line)
+                    var lines = codeContent.Split(new[] { '\r', '\n' }, StringSplitOptions.None);
+                    if (lines.Length > 0 && lines[0].Trim().Length > 0 && !lines[0].Contains(' '))
+                    {
+                        // First line might be language identifier, remove it
+                        codeContent = string.Join(Environment.NewLine, lines.Skip(1));
+                    }
+                    
+                    codeContent = codeContent.Trim();
+                    
+                    if (!string.IsNullOrWhiteSpace(codeContent))
+                    {
+                        // Create code block UI
+                        var codeContainer = new BlockUIContainer();
+                        var codeBorder = new Border
+                        {
+                            Style = (Style)FindResource("CodeBlockStyle")
+                        };
+                        
+                        var codeTextBlock = new TextBlock
+                        {
+                            Text = codeContent,
+                            FontFamily = new FontFamily("Consolas, Courier New"),
+                            FontSize = 13,
+                            Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#333333")),
+                            TextWrapping = TextWrapping.Wrap
+                        };
+                        
+                        codeBorder.Child = codeTextBlock;
+                        codeContainer.Child = codeBorder;
+                        document.Blocks.Add(codeContainer);
+                    }
+                }
+                
+                currentIndex = match.Index + match.Length;
+            }
+            
+            // Process any remaining text after the last code block
+            if (currentIndex < text.Length)
+            {
+                var remainingText = text.Substring(currentIndex);
+                if (!string.IsNullOrWhiteSpace(remainingText))
+                {
+                    ProcessRegularText(remainingText, document);
                 }
             }
             
-            // Add the last paragraph if it has content
-            if (paragraph.Inlines.Count > 0)
+            // If no code blocks found, process all text as regular text
+            if (matches.Count == 0 && !string.IsNullOrWhiteSpace(text))
             {
-                document.Blocks.Add(paragraph);
+                ProcessRegularText(text, document);
             }
             
             return document;
+        }
+        
+        private void ProcessRegularText(string text, FlowDocument document)
+        {
+            // Split regular text into paragraphs
+            var paragraphs = text.Split(new[] { "\r\n\r\n", "\n\n" }, StringSplitOptions.RemoveEmptyEntries);
+            
+            foreach (var paragraphText in paragraphs)
+            {
+                if (string.IsNullOrWhiteSpace(paragraphText))
+                    continue;
+                    
+                var paragraph = new Paragraph();
+                ProcessInlineFormatting(paragraphText.Trim(), paragraph);
+                
+                // Only add paragraph if it has content
+                if (paragraph.Inlines.Count > 0)
+                {
+                    document.Blocks.Add(paragraph);
+                }
+            }
+        }
+        
+        private void ProcessInlineFormatting(string text, Paragraph paragraph)
+        {
+            // Single pass processing to avoid any duplication
+            ProcessTextWithAllFormatting(text, paragraph);
+        }
+        
+        private void ProcessTextWithAllFormatting(string text, Paragraph paragraph)
+        {
+            var currentIndex = 0;
+            
+            // Combined regex for all formatting: inline code, bold, italic
+            var combinedRegex = new System.Text.RegularExpressions.Regex(
+                @"(`[^`]+`)|" +                     // Inline code: `text`
+                @"(\*\*\*(.+?)\*\*\*)|" +          // Bold + Italic: ***text***
+                @"(___(.+?)___)|" +                 // Bold + Italic: ___text___
+                @"(\*\*(.+?)\*\*)|" +               // Bold: **text**
+                @"(__(.+?)__)|" +                   // Bold: __text__
+                @"(\*(.+?)\*)|" +                   // Italic: *text*
+                @"(_(.+?)_)"                        // Italic: _text_
+            );
+            
+            var matches = combinedRegex.Matches(text);
+            
+            foreach (System.Text.RegularExpressions.Match match in matches)
+            {
+                // Add plain text before this match
+                if (match.Index > currentIndex)
+                {
+                    var plainText = text.Substring(currentIndex, match.Index - currentIndex);
+                    if (!string.IsNullOrEmpty(plainText))
+                    {
+                        paragraph.Inlines.Add(new Run(plainText));
+                    }
+                }
+                
+                // Process the matched formatting
+                if (match.Groups[1].Success) // Inline code: `text`
+                {
+                    var codeText = match.Groups[1].Value;
+                    var actualCode = codeText.Substring(1, codeText.Length - 2); // Remove backticks
+                    var codeRun = new Run(actualCode)
+                    {
+                        FontFamily = new FontFamily("Consolas, Courier New"),
+                        Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#F0F0F0")),
+                        FontSize = 13
+                    };
+                    paragraph.Inlines.Add(codeRun);
+                }
+                else if (match.Groups[2].Success) // ***text*** - Bold + Italic
+                {
+                    var run = new Run(match.Groups[3].Value)
+                    {
+                        FontWeight = FontWeights.Bold,
+                        FontStyle = FontStyles.Italic
+                    };
+                    paragraph.Inlines.Add(run);
+                }
+                else if (match.Groups[4].Success) // ___text___ - Bold + Italic
+                {
+                    var run = new Run(match.Groups[5].Value)
+                    {
+                        FontWeight = FontWeights.Bold,
+                        FontStyle = FontStyles.Italic
+                    };
+                    paragraph.Inlines.Add(run);
+                }
+                else if (match.Groups[6].Success) // **text** - Bold
+                {
+                    var run = new Run(match.Groups[7].Value)
+                    {
+                        FontWeight = FontWeights.Bold
+                    };
+                    paragraph.Inlines.Add(run);
+                }
+                else if (match.Groups[8].Success) // __text__ - Bold
+                {
+                    var run = new Run(match.Groups[9].Value)
+                    {
+                        FontWeight = FontWeights.Bold
+                    };
+                    paragraph.Inlines.Add(run);
+                }
+                else if (match.Groups[10].Success) // *text* - Italic
+                {
+                    var run = new Run(match.Groups[11].Value)
+                    {
+                        FontStyle = FontStyles.Italic
+                    };
+                    paragraph.Inlines.Add(run);
+                }
+                else if (match.Groups[12].Success) // _text_ - Italic
+                {
+                    var run = new Run(match.Groups[13].Value)
+                    {
+                        FontStyle = FontStyles.Italic
+                    };
+                    paragraph.Inlines.Add(run);
+                }
+                
+                currentIndex = match.Index + match.Length;
+            }
+            
+            // Add any remaining plain text after the last match
+            if (currentIndex < text.Length)
+            {
+                var remainingText = text.Substring(currentIndex);
+                if (!string.IsNullOrEmpty(remainingText))
+                {
+                    paragraph.Inlines.Add(new Run(remainingText));
+                }
+            }
+            
+            // If no matches at all, add the entire text as plain text
+            if (matches.Count == 0 && !string.IsNullOrEmpty(text))
+            {
+                paragraph.Inlines.Add(new Run(text));
+            }
         }
     }
 }
