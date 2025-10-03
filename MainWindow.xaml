@@ -285,6 +285,73 @@
                                   Margin="24,16,24,24"
                                   VerticalScrollBarVisibility="Auto">
                         <StackPanel>
+                            <!-- Personal Settings Section -->
+                            <TextBlock Text="Personal Settings"
+                                       FontSize="16"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource ForegroundBrush}"
+                                       Margin="0,0,0,12"/>
+                            
+                            <Grid Margin="0,0,0,24">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                
+                                <TextBlock Grid.Row="0"
+                                           Text="Name"
+                                           FontSize="14"
+                                           FontWeight="Medium"
+                                           Foreground="{StaticResource ForegroundBrush}"
+                                           Margin="0,0,0,4"/>
+                                
+                                <TextBlock Grid.Row="1"
+                                           Text="What would you like Loadable to call you?"
+                                           FontSize="12"
+                                           Foreground="{StaticResource SecondaryTextBrush}"
+                                           Margin="0,0,0,8"/>
+                                
+                                <TextBox Grid.Row="2"
+                                         Name="NameSettingTextBox"
+                                         FontSize="14"
+                                         Padding="12,10"
+                                         Background="{StaticResource BackgroundBrush}"
+                                         Foreground="{StaticResource ForegroundBrush}"
+                                         BorderBrush="{StaticResource BorderBrush}"
+                                         BorderThickness="1"
+                                         MaxLength="50"
+                                         TextChanged="NameSettingTextBox_TextChanged"/>
+                            </Grid>
+                            
+                            <!-- Notifications Setting -->
+                            <Grid Margin="0,0,0,24">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="Notifications"
+                                               FontSize="14"
+                                               FontWeight="Medium"
+                                               Foreground="{StaticResource ForegroundBrush}"
+                                               Margin="0,0,0,4"/>
+                                    
+                                    <TextBlock Text="Enable desktop notifications for chat responses"
+                                               FontSize="12"
+                                               Foreground="{StaticResource SecondaryTextBrush}"/>
+                                </StackPanel>
+                                
+                                <CheckBox Grid.Column="1"
+                                          Name="NotificationsToggle"
+                                          Style="{StaticResource ToggleSwitchStyle}"
+                                          VerticalAlignment="Center"
+                                          Margin="16,0,0,0"
+                                          Checked="NotificationsToggle_Changed"
+                                          Unchecked="NotificationsToggle_Changed"/>
+                            </Grid>
+                            
                             <!-- Data Management Section -->
                             <TextBlock Text="Data Management"
                                        FontSize="16"

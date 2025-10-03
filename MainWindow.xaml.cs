@@ -9,6 +9,8 @@ using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
+using System.Media;
+using System.Runtime.InteropServices;
 using Codeful.Models;
 using Codeful.Services;
 
@@ -21,20 +23,30 @@ namespace Codeful
     {
         private readonly GroqService _groqService;
         private readonly ChatStorageService _chatStorage;
+        private readonly SettingsService _settingsService;
+        private readonly NotificationService _notificationService;
         private TextBlock? _currentThinkingText;
         private ChatData _currentChat;
         private List<ChatData> _allChats;
+        private UserSettings _userSettings;
 
         public MainWindow()
         {
             InitializeComponent();
             _groqService = new GroqService();
             _chatStorage = new ChatStorageService();
+            _settingsService = new SettingsService();
+            _notificationService = new NotificationService();
             _currentChat = new ChatData();
             _allChats = new List<ChatData>();
+            _userSettings = new UserSettings();
             
             MessageInput.Focus();
             _ = LoadChatHistoryAsync();
+            _ = LoadUserSettingsAsync();
+            
+            // Show initial welcome message after settings are loaded
+            _ = Task.Delay(100).ContinueWith(_ => Dispatcher.InvokeAsync(ShowWelcomeMessage));
         }
 
         private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -88,6 +100,72 @@ namespace Codeful
                     return childOfChild;
             }
             return null;
+        }
+
+        private async Task LoadUserSettingsAsync()
+        {
+            try
+            {
+                _userSettings = await _settingsService.LoadSettingsAsync();
+                
+                // Update UI with loaded settings
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    NameSettingTextBox.Text = _userSettings.Name;
+                    NotificationsToggle.IsChecked = _userSettings.Notifications;
+                    
+                    // Refresh welcome message if current chat is empty
+                    if (_currentChat.Messages.Count == 0)
+                    {
+                        ShowWelcomeMessage();
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    MessageBox.Show($"Error loading user settings: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                });
+            }
+        }
+
+        private async void NameSettingTextBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (sender is TextBox textBox && _userSettings != null)
+            {
+                _userSettings.Name = textBox.Text;
+                try
+                {
+                    await _settingsService.SaveSettingsAsync(_userSettings);
+                    
+                    // Refresh welcome message if current chat is empty
+                    if (_currentChat.Messages.Count == 0)
+                    {
+                        ShowWelcomeMessage();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Error saving user settings: {ex.Message}");
+                }
+            }
+        }
+
+        private async void NotificationsToggle_Changed(object sender, RoutedEventArgs e)
+        {
+            if (sender is CheckBox checkBox && _userSettings != null)
+            {
+                _userSettings.Notifications = checkBox.IsChecked ?? false;
+                try
+                {
+                    await _settingsService.SaveSettingsAsync(_userSettings);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Error saving user settings: {ex.Message}");
+                }
+            }
         }
 
         private async Task LoadChatHistoryAsync()
@@ -260,6 +338,70 @@ namespace Codeful
             }
         }
 
+        private string GetTimeBasedGreeting()
+        {
+            var hour = DateTime.Now.Hour;
+            if (hour >= 5 && hour < 12)
+                return "Good morning";
+            else if (hour >= 12 && hour < 17)
+                return "Good afternoon";
+            else
+                return "Good evening";
+        }
+
+        private void ShowWelcomeMessage()
+        {
+            // Clear any existing messages
+            ChatMessagesPanel.Children.Clear();
+
+            // Create welcome container
+            var welcomeContainer = new Grid
+            {
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(40)
+            };
+
+            var welcomeStack = new StackPanel
+            {
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+
+            // Create greeting text
+            var greeting = GetTimeBasedGreeting();
+            var userName = !string.IsNullOrWhiteSpace(_userSettings?.Name) ? $" {_userSettings.Name}" : "";
+            var greetingText = new TextBlock
+            {
+                Text = $"{greeting}{userName},",
+                FontSize = 16,
+                FontWeight = FontWeights.Medium,
+                Foreground = (SolidColorBrush)FindResource("ForegroundBrush"),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                TextAlignment = TextAlignment.Center,
+                Margin = new Thickness(0, 0, 0, 8),
+                FontFamily = new FontFamily("pack://application:,,,/Resources/#Epilogue")
+            };
+
+            // Create subtitle text
+            var subtitleText = new TextBlock
+            {
+                Text = "What would you like to code today?",
+                FontSize = 14,
+                Foreground = (SolidColorBrush)FindResource("SecondaryTextBrush"),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                TextAlignment = TextAlignment.Center,
+                FontFamily = new FontFamily("pack://application:,,,/Resources/#Epilogue")
+            };
+
+            welcomeStack.Children.Add(greetingText);
+            welcomeStack.Children.Add(subtitleText);
+            welcomeContainer.Children.Add(welcomeStack);
+
+            // Add to chat area
+            ChatMessagesPanel.Children.Add(welcomeContainer);
+        }
+
         private void CloseButton_Click(object sender, RoutedEventArgs e)
         {
             Application.Current.Shutdown();
@@ -270,8 +412,8 @@ namespace Codeful
             // Create new chat
             _currentChat = new ChatData();
             
-            // Clear chat messages
-            ChatMessagesPanel.Children.Clear();
+            // Show welcome message
+            ShowWelcomeMessage();
             MessageInput.Focus();
         }
 
@@ -318,9 +460,15 @@ namespace Codeful
                         // Delete all chats
                         await _chatStorage.DeleteAllChatsAsync();
                         
-                        // Clear current chat
+                        // Delete user settings
+                        await _settingsService.DeleteSettingsAsync();
+                        
+                        // Reset current chat and settings
                         _currentChat = new ChatData();
+                        _userSettings = new UserSettings();
                         ChatMessagesPanel.Children.Clear();
+                        NameSettingTextBox.Text = string.Empty;
+                        NotificationsToggle.IsChecked = true;
                         
                         // Refresh chat history (should be empty now)
                         await LoadChatHistoryAsync();
@@ -328,7 +476,7 @@ namespace Codeful
                         // Hide settings modal
                         HideSettingsModal();
                         
-                        MessageBox.Show("All chat data has been deleted.", "Data Deleted", 
+                        MessageBox.Show("All chat data and settings have been deleted.", "Data Deleted", 
                             MessageBoxButton.OK, MessageBoxImage.Information);
                     }
                     catch (Exception ex)
@@ -347,10 +495,19 @@ namespace Codeful
 
         private void MessageInput_KeyDown(object sender, KeyEventArgs e)
         {
-            if (e.Key == Key.Enter && Keyboard.Modifiers == ModifierKeys.None)
+            if (e.Key == Key.Enter)
             {
-                e.Handled = true;
-                SendMessage();
+                if (Keyboard.Modifiers == ModifierKeys.Shift)
+                {
+                    // Shift+Enter: Allow new line (don't handle the event)
+                    return;
+                }
+                else if (Keyboard.Modifiers == ModifierKeys.None)
+                {
+                    // Enter alone: Send message
+                    e.Handled = true;
+                    SendMessage();
+                }
             }
         }
 
@@ -681,6 +838,12 @@ namespace Codeful
             // Replace with fully formatted document at the end
             richTextBox.Document = finalDocument;
             ChatScrollViewer.ScrollToEnd();
+            
+            // Show notification if enabled
+            if (_userSettings.Notifications)
+            {
+                _notificationService.ShowToastNotification("Codeful", "Project is complete. Check it out!");
+            }
         }
         
         private FlowDocument CreateFormattedDocument(string text)
