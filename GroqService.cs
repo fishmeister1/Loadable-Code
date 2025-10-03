@@ -87,7 +87,8 @@ When responding:
 - Include relevant comments in code examples
 - Suggest improvements and alternatives when applicable
 - Be concise but thorough in your explanations
-- Focus on production-ready, scalable solutions"
+- Focus on production-ready, scalable solutions
+- If no reference to coding or programming is made, respond with a statement saying that you are not able to assist with that topic."
                         },
                         new
                         {
@@ -155,9 +156,25 @@ When responding:
                 var beforeThink = fullResponse.Substring(0, thinkStart).Trim();
                 var afterThink = fullResponse.Substring(thinkEnd + 8).Trim();
                 
-                conclusion = string.IsNullOrEmpty(beforeThink) ? afterThink : 
-                           string.IsNullOrEmpty(afterThink) ? beforeThink : 
-                           $"{beforeThink}\n\n{afterThink}";
+                // Avoid duplication by checking if beforeThink and afterThink are the same
+                if (string.IsNullOrEmpty(beforeThink))
+                {
+                    conclusion = afterThink;
+                }
+                else if (string.IsNullOrEmpty(afterThink))
+                {
+                    conclusion = beforeThink;
+                }
+                else if (beforeThink.Equals(afterThink, StringComparison.OrdinalIgnoreCase))
+                {
+                    // If they're the same, just use one of them
+                    conclusion = beforeThink;
+                }
+                else
+                {
+                    // Only concatenate if they're actually different
+                    conclusion = $"{beforeThink}\n\n{afterThink}";
+                }
                 conclusion = conclusion.Trim();
             }
             

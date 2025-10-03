@@ -742,23 +742,6 @@ namespace Codeful
                 };
 
                 stackPanel.Children.Add(thinkingText);
-                
-                container.Child = stackPanel;
-                ChatMessagesPanel.Children.Add(container);
-                ChatScrollViewer.ScrollToEnd();
-                
-                // Animate thinking text only if animate is true
-                if (animate)
-                {
-                    await AnimateText(thinkingText, response.ThinkingProcess, 10);
-                }
-                
-                // Hide thinking section after animation completes (only if animating)
-                if (animate)
-                {
-                    thinkingLabel.Visibility = Visibility.Collapsed;
-                    thinkingText.Visibility = Visibility.Collapsed;
-                }
             }
 
             // Add conclusion label
@@ -782,13 +765,32 @@ namespace Codeful
 
             stackPanel.Children.Add(conclusionRichText);
             
-            if (string.IsNullOrEmpty(response.ThinkingProcess))
-            {
-                container.Child = stackPanel;
-                ChatMessagesPanel.Children.Add(container);
-            }
-            
+            // Set container child and add to panel once, after all elements are added
+            container.Child = stackPanel;
+            ChatMessagesPanel.Children.Add(container);
             ChatScrollViewer.ScrollToEnd();
+
+            // Animate thinking text if it exists and animate is true
+            if (!string.IsNullOrEmpty(response.ThinkingProcess) && animate)
+            {
+                var thinkingText = stackPanel.Children.OfType<TextBlock>()
+                    .FirstOrDefault(tb => tb.Style == (Style)FindResource("ThinkingTextStyle"));
+                
+                if (thinkingText != null)
+                {
+                    await AnimateText(thinkingText, response.ThinkingProcess, 10);
+                    
+                    // Hide thinking section after animation completes
+                    var thinkingLabel = stackPanel.Children.OfType<TextBlock>()
+                        .FirstOrDefault(tb => tb.Text == "Thought Process");
+                    
+                    if (thinkingLabel != null)
+                    {
+                        thinkingLabel.Visibility = Visibility.Collapsed;
+                        thinkingText.Visibility = Visibility.Collapsed;
+                    }
+                }
+            }
             
             // Animate conclusion text with rich formatting only if animate is true
             if (animate)
