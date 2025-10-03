@@ -8,6 +8,7 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Shapes;
 using System.Media;
 using System.Runtime.InteropServices;
@@ -29,6 +30,7 @@ namespace Codeful
         private ChatData _currentChat;
         private List<ChatData> _allChats;
         private UserSettings _userSettings;
+        private bool _isLoadingPastChat = false;
 
         public MainWindow()
         {
@@ -299,6 +301,9 @@ namespace Codeful
 
         private void LoadChat(ChatData chat)
         {
+            // Set flag to disable ALL animations during past chat loading
+            _isLoadingPastChat = true;
+            
             _currentChat = chat;
             ChatMessagesPanel.Children.Clear();
 
@@ -318,6 +323,9 @@ namespace Codeful
                     AddAiResponseWithThinking(aiResponse);
                 }
             }
+            
+            // Re-enable animations for future new messages
+            _isLoadingPastChat = false;
         }
 
         private async Task SaveCurrentChat()
@@ -700,7 +708,7 @@ namespace Codeful
             });
         }
 
-        private async void AddAiResponseWithThinking(Services.AiResponse response)
+        private async void AddAiResponseWithThinking(Services.AiResponse response, bool animate = true)
         {
             var container = new Border
             {
@@ -728,7 +736,7 @@ namespace Codeful
                 // Add thinking text with typing animation
                 var thinkingText = new TextBlock
                 {
-                    Text = "",
+                    Text = animate ? "" : response.ThinkingProcess,
                     Style = (Style)FindResource("ThinkingTextStyle"),
                     Margin = new Thickness(0, 0, 0, 8)
                 };
@@ -739,8 +747,18 @@ namespace Codeful
                 ChatMessagesPanel.Children.Add(container);
                 ChatScrollViewer.ScrollToEnd();
                 
-                // Animate thinking text
-                await AnimateText(thinkingText, response.ThinkingProcess, 10);
+                // Animate thinking text only if animate is true
+                if (animate)
+                {
+                    await AnimateText(thinkingText, response.ThinkingProcess, 10);
+                }
+                
+                // Hide thinking section after animation completes (only if animating)
+                if (animate)
+                {
+                    thinkingLabel.Visibility = Visibility.Collapsed;
+                    thinkingText.Visibility = Visibility.Collapsed;
+                }
             }
 
             // Add conclusion label
@@ -772,8 +790,17 @@ namespace Codeful
             
             ChatScrollViewer.ScrollToEnd();
             
-            // Animate conclusion text with rich formatting
-            await AnimateRichText(conclusionRichText, response.Conclusion, 15);
+            // Animate conclusion text with rich formatting only if animate is true
+            if (animate)
+            {
+                await AnimateRichText(conclusionRichText, response.Conclusion, 15);
+            }
+            else
+            {
+                // Set content immediately without animation
+                var finalDocument = CreateFormattedDocument(response.Conclusion);
+                conclusionRichText.Document = finalDocument;
+            }
         }
 
         private void AddAiResponse(string text)
@@ -783,6 +810,8 @@ namespace Codeful
             AddAiResponseWithThinking(response);
         }
 
+
+
         private async Task AnimateText(TextBlock textBlock, string fullText, int delayMs)
         {
             if (string.IsNullOrEmpty(fullText))
@@ -791,7 +820,17 @@ namespace Codeful
                 return;
             }
 
+            // If loading past chat, set text immediately without animation
+            if (_isLoadingPastChat)
+            {
+                textBlock.Text = fullText;
+                return;
+            }
+
             textBlock.Text = "";
+            
+            // Start shining animation
+            StartShiningAnimation(textBlock);
             
             for (int i = 0; i <= fullText.Length; i++)
             {
@@ -801,6 +840,9 @@ namespace Codeful
                 // Scroll to bottom during animation
                 ChatScrollViewer.ScrollToEnd();
             }
+            
+            // Stop shining animation after typing is complete
+            StopShiningAnimation(textBlock);
         }
         
         private async Task AnimateRichText(RichTextBox richTextBox, string fullText, int delayMs)
@@ -813,6 +855,13 @@ namespace Codeful
 
             // Create the final formatted document once
             var finalDocument = CreateFormattedDocument(fullText);
+            
+            // If loading past chat, set document immediately without animation
+            if (_isLoadingPastChat)
+            {
+                richTextBox.Document = finalDocument;
+                return;
+            }
             
             // Create a temporary document for animation
             richTextBox.Document.Blocks.Clear();
@@ -843,6 +892,102 @@ namespace Codeful
             if (_userSettings.Notifications)
             {
                 _notificationService.ShowToastNotification("Codeful", "Project is complete. Check it out!");
+            }
+        }
+
+        private void AddShiningEffect(TextBlock textBlock)
+        {
+            // We'll create the shining effect by modifying the textblock's foreground with an animated gradient
+            // This is simpler and more reliable than overlay approaches
+        }
+
+        private void StartShiningAnimation(TextBlock textBlock)
+        {
+            // Create animated gradient brush for the text foreground
+            var gradient = new LinearGradientBrush();
+            gradient.StartPoint = new Point(0, 0);
+            gradient.EndPoint = new Point(1, 0);
+            
+            // Create gradient stops for the shining effect with pink/red/orange colors
+            var stop1 = new GradientStop(Color.FromRgb(102, 102, 102), 0.0);   // Dark gray base
+            var stop2 = new GradientStop(Color.FromRgb(255, 182, 193), 0.3);   // Light pink
+            var stop3 = new GradientStop(Color.FromRgb(255, 255, 255), 0.5);   // Pure white shine peak
+            var stop4 = new GradientStop(Color.FromRgb(255, 140, 0), 0.7);     // Dark orange
+            var stop5 = new GradientStop(Color.FromRgb(220, 20, 60), 1.0);     // Crimson red
+            
+            gradient.GradientStops.Add(stop1);
+            gradient.GradientStops.Add(stop2);
+            gradient.GradientStops.Add(stop3);
+            gradient.GradientStops.Add(stop4);
+            gradient.GradientStops.Add(stop5);
+            
+            textBlock.Foreground = gradient;
+            
+            // Animate the gradient stops to create the shining effect
+            var animation1 = new DoubleAnimation
+            {
+                From = -0.3,
+                To = 1.3,
+                Duration = TimeSpan.FromSeconds(1.5),
+                RepeatBehavior = RepeatBehavior.Forever
+            };
+            
+            var animation2 = new DoubleAnimation
+            {
+                From = -0.1,
+                To = 1.1,
+                Duration = TimeSpan.FromSeconds(1.5),
+                RepeatBehavior = RepeatBehavior.Forever
+            };
+            
+            var animation3 = new DoubleAnimation
+            {
+                From = 0.0,
+                To = 1.0,
+                Duration = TimeSpan.FromSeconds(1.5),
+                RepeatBehavior = RepeatBehavior.Forever
+            };
+            
+            var animation4 = new DoubleAnimation
+            {
+                From = 0.1,
+                To = 1.1,
+                Duration = TimeSpan.FromSeconds(1.5),
+                RepeatBehavior = RepeatBehavior.Forever
+            };
+            
+            var animation5 = new DoubleAnimation
+            {
+                From = 0.3,
+                To = 1.3,
+                Duration = TimeSpan.FromSeconds(1.5),
+                RepeatBehavior = RepeatBehavior.Forever
+            };
+            
+            // Start animations
+            stop1.BeginAnimation(GradientStop.OffsetProperty, animation1);
+            stop2.BeginAnimation(GradientStop.OffsetProperty, animation2);
+            stop3.BeginAnimation(GradientStop.OffsetProperty, animation3);
+            stop4.BeginAnimation(GradientStop.OffsetProperty, animation4);
+            stop5.BeginAnimation(GradientStop.OffsetProperty, animation5);
+            
+            // Store gradient for cleanup
+            textBlock.Tag = gradient;
+        }
+
+        private void StopShiningAnimation(TextBlock textBlock)
+        {
+            if (textBlock.Tag is LinearGradientBrush gradient)
+            {
+                // Stop all animations
+                foreach (var stop in gradient.GradientStops)
+                {
+                    stop.BeginAnimation(GradientStop.OffsetProperty, null);
+                }
+                
+                // Reset to normal foreground color
+                textBlock.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#666666"));
+                textBlock.Tag = null;
             }
         }
         
