@@ -719,7 +719,8 @@ namespace Codeful
             // Add rich text formatting with instant display
             var conclusionRichText = new RichTextBox
             {
-                Style = (Style)FindResource("AiRichTextStyle")
+                Style = (Style)FindResource("AiRichTextStyle"),
+                Focusable = false
             };
 
             // Create and apply formatted document immediately
@@ -903,9 +904,81 @@ namespace Codeful
             var codeContent = string.Join(Environment.NewLine, codeLines);
             
             var codeContainer = new BlockUIContainer();
+            
+            // Create main container for code block with copy button
+            var mainContainer = new Grid();
+            mainContainer.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            mainContainer.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            
+            // Create header with copy button
+            var headerBorder = new Border
+            {
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#E8F0FE")),
+                BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#D1D9E0")),
+                BorderThickness = new Thickness(1, 1, 1, 0),
+                CornerRadius = new CornerRadius(6, 6, 0, 0),
+                Padding = new Thickness(8, 4, 8, 4)
+            };
+            
+            var headerGrid = new Grid();
+            headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            
+            // Language label
+            var languageLabel = new TextBlock
+            {
+                Text = string.IsNullOrEmpty(language) ? "code" : language.ToUpper(),
+                FontSize = 11,
+                FontWeight = FontWeights.Medium,
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#586069")),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            Grid.SetColumn(languageLabel, 0);
+            
+            // Copy button
+            var copyButton = new Button
+            {
+                Content = "Copy",
+                FontSize = 11,
+                FontWeight = FontWeights.Medium,
+                Padding = new Thickness(8, 2, 8, 2),
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#F6F8FA")),
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#24292E")),
+                BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#D1D5DA")),
+                BorderThickness = new Thickness(1),
+                Cursor = Cursors.Hand,
+                VerticalAlignment = VerticalAlignment.Center,
+                Tag = codeContent // Store the code content in the tag for copying
+            };
+            
+            copyButton.Click += CopyButton_Click;
+            
+            // Add hover effects
+            copyButton.MouseEnter += (s, e) =>
+            {
+                copyButton.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#E1E4E8"));
+            };
+            
+            copyButton.MouseLeave += (s, e) =>
+            {
+                copyButton.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#F6F8FA"));
+            };
+            
+            Grid.SetColumn(copyButton, 1);
+            
+            headerGrid.Children.Add(languageLabel);
+            headerGrid.Children.Add(copyButton);
+            headerBorder.Child = headerGrid;
+            Grid.SetRow(headerBorder, 0);
+            
+            // Create code content border
             var codeBorder = new Border
             {
-                Style = (Style)FindResource("CodeBlockStyle")
+                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#F6F8FA")),
+                BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#D1D9E0")),
+                BorderThickness = new Thickness(1, 0, 1, 1),
+                CornerRadius = new CornerRadius(0, 0, 6, 6),
+                Padding = new Thickness(12)
             };
             
             // Create a RichTextBox for syntax highlighting
@@ -916,7 +989,8 @@ namespace Codeful
                 Background = Brushes.Transparent,
                 BorderThickness = new Thickness(0),
                 IsReadOnly = true,
-                IsTabStop = false
+                IsTabStop = false,
+                Focusable = false
             };
             
             ScrollViewer.SetVerticalScrollBarVisibility(codeRichTextBox, ScrollBarVisibility.Disabled);
@@ -927,8 +1001,67 @@ namespace Codeful
             codeRichTextBox.Document = highlightedDocument;
             
             codeBorder.Child = codeRichTextBox;
-            codeContainer.Child = codeBorder;
+            Grid.SetRow(codeBorder, 1);
+            
+            mainContainer.Children.Add(headerBorder);
+            mainContainer.Children.Add(codeBorder);
+            
+            codeContainer.Child = mainContainer;
             document.Blocks.Add(codeContainer);
+        }
+
+        private void CopyButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button button && button.Tag is string codeContent)
+            {
+                try
+                {
+                    Clipboard.SetText(codeContent);
+                    
+                    // Provide visual feedback
+                    var originalContent = button.Content;
+                    button.Content = "Copied!";
+                    button.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#28A745"));
+                    
+                    // Reset after 2 seconds
+                    var timer = new System.Windows.Threading.DispatcherTimer
+                    {
+                        Interval = TimeSpan.FromSeconds(2)
+                    };
+                    
+                    timer.Tick += (s, args) =>
+                    {
+                        button.Content = originalContent;
+                        button.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#24292E"));
+                        timer.Stop();
+                    };
+                    
+                    timer.Start();
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Failed to copy to clipboard: {ex.Message}");
+                    
+                    // Show error feedback
+                    var originalContent = button.Content;
+                    button.Content = "Error";
+                    button.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#D73A49"));
+                    
+                    var timer = new System.Windows.Threading.DispatcherTimer
+                    {
+                        Interval = TimeSpan.FromSeconds(2)
+                    };
+                    
+                    timer.Tick += (s, args) =>
+                    {
+                        button.Content = originalContent;
+                        button.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#24292E"));
+                        timer.Stop();
+                    };
+                    
+                    timer.Start();
+                }
+            }
         }
 
         private FlowDocument ApplySyntaxHighlighting(string code, string language)

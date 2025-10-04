@@ -59,20 +59,10 @@
             <Setter Property="IsReadOnly" Value="True"/>
             <Setter Property="IsDocumentEnabled" Value="True"/>
             <Setter Property="IsTabStop" Value="False"/>
+            <Setter Property="Focusable" Value="False"/>
             <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Disabled"/>
             <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
         </Style>
-        
-        <!-- Code Block Style -->
-        <Style x:Key="CodeBlockStyle" TargetType="Border">
-            <Setter Property="Background" Value="#F6F8FA"/>
-            <Setter Property="BorderBrush" Value="#D1D9E0"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius" Value="6"/>
-            <Setter Property="Padding" Value="12"/>
-            <Setter Property="Margin" Value="0,8"/>
-        </Style>
-
         <!-- Icon Button Style -->
         <Style x:Key="IconButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
