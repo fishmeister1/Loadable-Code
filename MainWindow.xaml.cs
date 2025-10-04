@@ -283,10 +283,13 @@ namespace Codeful
         {
             if (sender is Button button && button.Tag is ChatData chat)
             {
-                var result = MessageBox.Show($"Are you sure you want to delete this chat?\n\n\"{chat.DisplayTitle}\"", 
-                    "Delete Chat", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                var result = CustomConfirmationDialog.ShowDialog(
+                    this, 
+                    "Delete Chat", 
+                    "Are you sure you want to delete this chat?", 
+                    $"\"{chat.DisplayTitle}\"");
 
-                if (result == MessageBoxResult.Yes)
+                if (result)
                 {
                     await _chatStorage.DeleteChatAsync(chat.Id);
                     
@@ -612,25 +615,11 @@ namespace Codeful
                 // Add divider
                 AddDivider();
 
-                // Add thinking container
-                var thinkingContainer = CreateThinkingContainer();
-                ChatMessagesPanel.Children.Add(thinkingContainer);
-
-                // Scroll to bottom
-                ChatScrollViewer.ScrollToEnd();
-
                 // Get AI response with thinking process
-                var response = await _groqService.SendMessageAsync(messageText, OnThinkingUpdate);
+                var response = await _groqService.SendMessageAsync(messageText, null);
 
-                // Remove the thinking container since we'll display it differently
-                if (ChatMessagesPanel.Children.Count > 0 && 
-                    ChatMessagesPanel.Children[ChatMessagesPanel.Children.Count - 1] is StackPanel)
-                {
-                    ChatMessagesPanel.Children.RemoveAt(ChatMessagesPanel.Children.Count - 1);
-                }
-
-                // Add final AI response with thinking and conclusion
-                AddAiResponseWithThinking(response);
+                // Add final AI response - appears instantly
+                AddAiResponseWithThinking(response, false);
                 
                 // Add AI message to current chat
                 var aiMessage = new ChatMessage
@@ -715,7 +704,7 @@ namespace Codeful
             });
         }
 
-        private async void AddAiResponseWithThinking(Services.AiResponse response, bool animate = true)
+        private void AddAiResponseWithThinking(Services.AiResponse response, bool animate = true)
         {
             var container = new Border
             {
@@ -723,497 +712,43 @@ namespace Codeful
             };
 
             var stackPanel = new StackPanel();
-            TextBlock? thinkingLabel = null;
-            TextBlock? thinkingText = null;
 
-            // Add thinking process if it exists
-            if (!string.IsNullOrEmpty(response.ThinkingProcess))
+            // Only show the conclusion, exclude thinking process
+            var displayText = !string.IsNullOrEmpty(response.Conclusion) ? response.Conclusion : "No response received";
+
+            // Add simple plain text block - no formatting
+            var responseText = new TextBlock
             {
-                // Add bold "Thought Process" label
-                thinkingLabel = new TextBlock
-                {
-                    Text = "Thought Process",
-                    FontWeight = FontWeights.Bold,
-                    FontSize = 12,
-                    Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#666666")),
-                    Margin = new Thickness(0, 0, 0, 4),
-                    FontFamily = new FontFamily("pack://application:,,,/Resources/#Epilogue")
-                };
-
-                stackPanel.Children.Add(thinkingLabel);
-
-                // Add thinking text with typing animation
-                thinkingText = new TextBlock
-                {
-                    Text = animate ? "" : response.ThinkingProcess,
-                    Style = (Style)FindResource("ThinkingTextStyle"),
-                    Margin = new Thickness(0, 0, 0, 8)
-                };
-
-                stackPanel.Children.Add(thinkingText);
-            }
-
-            // Add conclusion label
-            var conclusionLabel = new TextBlock
-            {
-                Text = "Conclusion",
-                FontWeight = FontWeights.Bold,
-                FontSize = 12,
-                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#666666")),
-                Margin = new Thickness(0, 8, 0, 4),
-                FontFamily = new FontFamily("pack://application:,,,/Resources/#Epilogue")
+                Text = displayText,
+                TextWrapping = TextWrapping.Wrap,
+                FontSize = 14,
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1F1F1F")),
+                LineHeight = 20,
+                Margin = new Thickness(0)
             };
 
-            stackPanel.Children.Add(conclusionLabel);
-
-            // Add conclusion text with rich formatting and typing animation
-            var conclusionRichText = new RichTextBox
-            {
-                Style = (Style)FindResource("AiRichTextStyle")
-            };
-
-            stackPanel.Children.Add(conclusionRichText);
+            stackPanel.Children.Add(responseText);
             
             // Set container child and add to panel once, after all elements are added
             container.Child = stackPanel;
             ChatMessagesPanel.Children.Add(container);
             ChatScrollViewer.ScrollToEnd();
-
-            // Animate thinking text if it exists and animate is true
-            if (!string.IsNullOrEmpty(response.ThinkingProcess) && animate && thinkingText != null)
-            {
-                await AnimateText(thinkingText, response.ThinkingProcess, 10);
-                
-                // Hide thinking section after animation completes
-                if (thinkingLabel != null)
-                {
-                    thinkingLabel.Visibility = Visibility.Collapsed;
-                    thinkingText.Visibility = Visibility.Collapsed;
-                }
-            }
-            
-            // Animate conclusion text with rich formatting only if animate is true
-            if (animate)
-            {
-                await AnimateRichText(conclusionRichText, response.Conclusion, 15);
-            }
-            else
-            {
-                // Set content immediately without animation
-                var finalDocument = CreateFormattedDocument(response.Conclusion);
-                conclusionRichText.Document = finalDocument;
-            }
         }
 
         private void AddAiResponse(string text)
         {
             // Fallback method for simple text responses
             var response = new Services.AiResponse { Conclusion = text };
-            AddAiResponseWithThinking(response);
+            AddAiResponseWithThinking(response, false);
         }
 
 
 
-        private async Task AnimateText(TextBlock textBlock, string fullText, int delayMs)
-        {
-            if (string.IsNullOrEmpty(fullText))
-            {
-                textBlock.Text = "";
-                return;
-            }
 
-            // If loading past chat, set text immediately without animation
-            if (_isLoadingPastChat)
-            {
-                textBlock.Text = fullText;
-                return;
-            }
-
-            textBlock.Text = "";
-            
-            // Start shining animation
-            StartShiningAnimation(textBlock);
-            
-            for (int i = 0; i <= fullText.Length; i++)
-            {
-                await Task.Delay(delayMs);
-                textBlock.Text = fullText.Substring(0, i);
-                
-                // Scroll to bottom during animation
-                ChatScrollViewer.ScrollToEnd();
-            }
-            
-            // Stop shining animation after typing is complete
-            StopShiningAnimation(textBlock);
-        }
         
-        private async Task AnimateRichText(RichTextBox richTextBox, string fullText, int delayMs)
-        {
-            if (string.IsNullOrEmpty(fullText))
-            {
-                richTextBox.Document.Blocks.Clear();
-                return;
-            }
 
-            // Create the final formatted document once
-            var finalDocument = CreateFormattedDocument(fullText);
-            
-            // If loading past chat, set document immediately without animation
-            if (_isLoadingPastChat)
-            {
-                richTextBox.Document = finalDocument;
-                return;
-            }
-            
-            // Create a temporary document for animation
-            richTextBox.Document.Blocks.Clear();
-            
-            // Simple character-by-character animation using plain text
-            // to avoid recreating formatted documents repeatedly
-            var tempParagraph = new Paragraph();
-            richTextBox.Document.Blocks.Add(tempParagraph);
-            
-            for (int i = 0; i <= fullText.Length; i++)
-            {
-                await Task.Delay(delayMs);
-                string currentText = fullText.Substring(0, i);
-                
-                // Update the paragraph with plain text during animation
-                tempParagraph.Inlines.Clear();
-                tempParagraph.Inlines.Add(new Run(currentText));
-                
-                // Scroll to bottom during animation
-                ChatScrollViewer.ScrollToEnd();
-            }
-            
-            // Replace with fully formatted document at the end
-            richTextBox.Document = finalDocument;
-            ChatScrollViewer.ScrollToEnd();
-            
-            // Show notification if enabled
-            if (_userSettings.Notifications)
-            {
-                _notificationService.ShowToastNotification("Codeful", "Project is complete. Check it out!");
-            }
-        }
 
-        private void AddShiningEffect(TextBlock textBlock)
-        {
-            // We'll create the shining effect by modifying the textblock's foreground with an animated gradient
-            // This is simpler and more reliable than overlay approaches
-        }
 
-        private void StartShiningAnimation(TextBlock textBlock)
-        {
-            // Create animated gradient brush for the text foreground
-            var gradient = new LinearGradientBrush();
-            gradient.StartPoint = new Point(0, 0);
-            gradient.EndPoint = new Point(1, 0);
-            
-            // Create gradient stops for the shining effect with pink/red/orange colors
-            var stop1 = new GradientStop(Color.FromRgb(102, 102, 102), 0.0);   // Dark gray base
-            var stop2 = new GradientStop(Color.FromRgb(255, 182, 193), 0.3);   // Light pink
-            var stop3 = new GradientStop(Color.FromRgb(255, 255, 255), 0.5);   // Pure white shine peak
-            var stop4 = new GradientStop(Color.FromRgb(255, 140, 0), 0.7);     // Dark orange
-            var stop5 = new GradientStop(Color.FromRgb(220, 20, 60), 1.0);     // Crimson red
-            
-            gradient.GradientStops.Add(stop1);
-            gradient.GradientStops.Add(stop2);
-            gradient.GradientStops.Add(stop3);
-            gradient.GradientStops.Add(stop4);
-            gradient.GradientStops.Add(stop5);
-            
-            textBlock.Foreground = gradient;
-            
-            // Animate the gradient stops to create the shining effect
-            var animation1 = new DoubleAnimation
-            {
-                From = -0.3,
-                To = 1.3,
-                Duration = TimeSpan.FromSeconds(1.5),
-                RepeatBehavior = RepeatBehavior.Forever
-            };
-            
-            var animation2 = new DoubleAnimation
-            {
-                From = -0.1,
-                To = 1.1,
-                Duration = TimeSpan.FromSeconds(1.5),
-                RepeatBehavior = RepeatBehavior.Forever
-            };
-            
-            var animation3 = new DoubleAnimation
-            {
-                From = 0.0,
-                To = 1.0,
-                Duration = TimeSpan.FromSeconds(1.5),
-                RepeatBehavior = RepeatBehavior.Forever
-            };
-            
-            var animation4 = new DoubleAnimation
-            {
-                From = 0.1,
-                To = 1.1,
-                Duration = TimeSpan.FromSeconds(1.5),
-                RepeatBehavior = RepeatBehavior.Forever
-            };
-            
-            var animation5 = new DoubleAnimation
-            {
-                From = 0.3,
-                To = 1.3,
-                Duration = TimeSpan.FromSeconds(1.5),
-                RepeatBehavior = RepeatBehavior.Forever
-            };
-            
-            // Start animations
-            stop1.BeginAnimation(GradientStop.OffsetProperty, animation1);
-            stop2.BeginAnimation(GradientStop.OffsetProperty, animation2);
-            stop3.BeginAnimation(GradientStop.OffsetProperty, animation3);
-            stop4.BeginAnimation(GradientStop.OffsetProperty, animation4);
-            stop5.BeginAnimation(GradientStop.OffsetProperty, animation5);
-            
-            // Store gradient for cleanup
-            textBlock.Tag = gradient;
-        }
 
-        private void StopShiningAnimation(TextBlock textBlock)
-        {
-            if (textBlock.Tag is LinearGradientBrush gradient)
-            {
-                // Stop all animations
-                foreach (var stop in gradient.GradientStops)
-                {
-                    stop.BeginAnimation(GradientStop.OffsetProperty, null);
-                }
-                
-                // Reset to normal foreground color
-                textBlock.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#666666"));
-                textBlock.Tag = null;
-            }
-        }
-        
-        private FlowDocument CreateFormattedDocument(string text)
-        {
-            var document = new FlowDocument();
-            
-            var currentIndex = 0;
-            var codeBlockRegex = new System.Text.RegularExpressions.Regex(@"```[\s\S]*?```", System.Text.RegularExpressions.RegexOptions.Multiline);
-            var matches = codeBlockRegex.Matches(text);
-            
-            foreach (System.Text.RegularExpressions.Match match in matches)
-            {
-                // Process text before this code block
-                if (match.Index > currentIndex)
-                {
-                    var textBefore = text.Substring(currentIndex, match.Index - currentIndex);
-                    if (!string.IsNullOrWhiteSpace(textBefore))
-                    {
-                        ProcessRegularText(textBefore, document);
-                    }
-                }
-                
-                // Process the code block
-                var fullCodeBlock = match.Value;
-                if (fullCodeBlock.Length > 6)
-                {
-                    // Extract code content (remove ``` from start and end)
-                    var codeContent = fullCodeBlock.Substring(3, fullCodeBlock.Length - 6);
-                    
-                    // Remove language identifier if present (first line)
-                    var lines = codeContent.Split(new[] { '\r', '\n' }, StringSplitOptions.None);
-                    if (lines.Length > 0 && lines[0].Trim().Length > 0 && !lines[0].Contains(' '))
-                    {
-                        // First line might be language identifier, remove it
-                        codeContent = string.Join(Environment.NewLine, lines.Skip(1));
-                    }
-                    
-                    codeContent = codeContent.Trim();
-                    
-                    if (!string.IsNullOrWhiteSpace(codeContent))
-                    {
-                        // Create code block UI
-                        var codeContainer = new BlockUIContainer();
-                        var codeBorder = new Border
-                        {
-                            Style = (Style)FindResource("CodeBlockStyle")
-                        };
-                        
-                        var codeTextBlock = new TextBlock
-                        {
-                            Text = codeContent,
-                            FontFamily = new FontFamily("Consolas, Courier New"),
-                            FontSize = 13,
-                            Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#333333")),
-                            TextWrapping = TextWrapping.Wrap
-                        };
-                        
-                        codeBorder.Child = codeTextBlock;
-                        codeContainer.Child = codeBorder;
-                        document.Blocks.Add(codeContainer);
-                    }
-                }
-                
-                currentIndex = match.Index + match.Length;
-            }
-            
-            // Process any remaining text after the last code block
-            if (currentIndex < text.Length)
-            {
-                var remainingText = text.Substring(currentIndex);
-                if (!string.IsNullOrWhiteSpace(remainingText))
-                {
-                    ProcessRegularText(remainingText, document);
-                }
-            }
-            
-            // If no code blocks found, process all text as regular text
-            if (matches.Count == 0 && !string.IsNullOrWhiteSpace(text))
-            {
-                ProcessRegularText(text, document);
-            }
-            
-            return document;
-        }
-        
-        private void ProcessRegularText(string text, FlowDocument document)
-        {
-            // Split regular text into paragraphs
-            var paragraphs = text.Split(new[] { "\r\n\r\n", "\n\n" }, StringSplitOptions.RemoveEmptyEntries);
-            
-            foreach (var paragraphText in paragraphs)
-            {
-                if (string.IsNullOrWhiteSpace(paragraphText))
-                    continue;
-                    
-                var paragraph = new Paragraph();
-                ProcessInlineFormatting(paragraphText.Trim(), paragraph);
-                
-                // Only add paragraph if it has content
-                if (paragraph.Inlines.Count > 0)
-                {
-                    document.Blocks.Add(paragraph);
-                }
-            }
-        }
-        
-        private void ProcessInlineFormatting(string text, Paragraph paragraph)
-        {
-            // Single pass processing to avoid any duplication
-            ProcessTextWithAllFormatting(text, paragraph);
-        }
-        
-        private void ProcessTextWithAllFormatting(string text, Paragraph paragraph)
-        {
-            var currentIndex = 0;
-            
-            // Combined regex for all formatting: inline code, bold, italic
-            var combinedRegex = new System.Text.RegularExpressions.Regex(
-                @"(`[^`]+`)|" +                     // Inline code: `text`
-                @"(\*\*\*(.+?)\*\*\*)|" +          // Bold + Italic: ***text***
-                @"(___(.+?)___)|" +                 // Bold + Italic: ___text___
-                @"(\*\*(.+?)\*\*)|" +               // Bold: **text**
-                @"(__(.+?)__)|" +                   // Bold: __text__
-                @"(\*(.+?)\*)|" +                   // Italic: *text*
-                @"(_(.+?)_)"                        // Italic: _text_
-            );
-            
-            var matches = combinedRegex.Matches(text);
-            
-            foreach (System.Text.RegularExpressions.Match match in matches)
-            {
-                // Add plain text before this match
-                if (match.Index > currentIndex)
-                {
-                    var plainText = text.Substring(currentIndex, match.Index - currentIndex);
-                    if (!string.IsNullOrEmpty(plainText))
-                    {
-                        paragraph.Inlines.Add(new Run(plainText));
-                    }
-                }
-                
-                // Process the matched formatting
-                if (match.Groups[1].Success) // Inline code: `text`
-                {
-                    var codeText = match.Groups[1].Value;
-                    var actualCode = codeText.Substring(1, codeText.Length - 2); // Remove backticks
-                    var codeRun = new Run(actualCode)
-                    {
-                        FontFamily = new FontFamily("Consolas, Courier New"),
-                        Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#F0F0F0")),
-                        FontSize = 13
-                    };
-                    paragraph.Inlines.Add(codeRun);
-                }
-                else if (match.Groups[2].Success) // ***text*** - Bold + Italic
-                {
-                    var run = new Run(match.Groups[3].Value)
-                    {
-                        FontWeight = FontWeights.Bold,
-                        FontStyle = FontStyles.Italic
-                    };
-                    paragraph.Inlines.Add(run);
-                }
-                else if (match.Groups[4].Success) // ___text___ - Bold + Italic
-                {
-                    var run = new Run(match.Groups[5].Value)
-                    {
-                        FontWeight = FontWeights.Bold,
-                        FontStyle = FontStyles.Italic
-                    };
-                    paragraph.Inlines.Add(run);
-                }
-                else if (match.Groups[6].Success) // **text** - Bold
-                {
-                    var run = new Run(match.Groups[7].Value)
-                    {
-                        FontWeight = FontWeights.Bold
-                    };
-                    paragraph.Inlines.Add(run);
-                }
-                else if (match.Groups[8].Success) // __text__ - Bold
-                {
-                    var run = new Run(match.Groups[9].Value)
-                    {
-                        FontWeight = FontWeights.Bold
-                    };
-                    paragraph.Inlines.Add(run);
-                }
-                else if (match.Groups[10].Success) // *text* - Italic
-                {
-                    var run = new Run(match.Groups[11].Value)
-                    {
-                        FontStyle = FontStyles.Italic
-                    };
-                    paragraph.Inlines.Add(run);
-                }
-                else if (match.Groups[12].Success) // _text_ - Italic
-                {
-                    var run = new Run(match.Groups[13].Value)
-                    {
-                        FontStyle = FontStyles.Italic
-                    };
-                    paragraph.Inlines.Add(run);
-                }
-                
-                currentIndex = match.Index + match.Length;
-            }
-            
-            // Add any remaining plain text after the last match
-            if (currentIndex < text.Length)
-            {
-                var remainingText = text.Substring(currentIndex);
-                if (!string.IsNullOrEmpty(remainingText))
-                {
-                    paragraph.Inlines.Add(new Run(remainingText));
-                }
-            }
-            
-            // If no matches at all, add the entire text as plain text
-            if (matches.Count == 0 && !string.IsNullOrEmpty(text))
-            {
-                paragraph.Inlines.Add(new Run(text));
-            }
-        }
     }
 }

@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -71,6 +73,9 @@ namespace Codeful.Services
                             content = @"You are an expert coding agent with deep knowledge of programming languages, frameworks, and software development best practices. Please state your thought process in short detail and present your final conclusions at the end.
 
 When responding, wrap your thought process in <think></think> tags, then provide your final answer outside the tags.
+
+Who you are:
+- You are Loadable Code, an AI coding assistant designed to help developers write, debug, and optimize code across various programming languages and frameworks.
 
 Your expertise includes:
 - Writing clean, efficient, and maintainable code
@@ -145,37 +150,24 @@ When responding:
             var thinkEnd = fullResponse.IndexOf("</think>");
             
             string thinkingText = "";
-            string conclusion = fullResponse;
+            string conclusion = "";
             
             if (thinkStart != -1 && thinkEnd != -1 && thinkEnd > thinkStart)
             {
-                // Extract thinking text
+                // Extract thinking text (but we won't display it)
                 thinkingText = fullResponse.Substring(thinkStart + 7, thinkEnd - thinkStart - 7).Trim();
                 
-                // Extract conclusion (everything before and after thinking tags)
-                var beforeThink = fullResponse.Substring(0, thinkStart).Trim();
+                // Extract conclusion (everything after thinking tags)
                 var afterThink = fullResponse.Substring(thinkEnd + 8).Trim();
+                var beforeThink = fullResponse.Substring(0, thinkStart).Trim();
                 
-                // Avoid duplication by checking if beforeThink and afterThink are the same
-                if (string.IsNullOrEmpty(beforeThink))
-                {
-                    conclusion = afterThink;
-                }
-                else if (string.IsNullOrEmpty(afterThink))
-                {
-                    conclusion = beforeThink;
-                }
-                else if (beforeThink.Equals(afterThink, StringComparison.OrdinalIgnoreCase))
-                {
-                    // If they're the same, just use one of them
-                    conclusion = beforeThink;
-                }
-                else
-                {
-                    // Only concatenate if they're actually different
-                    conclusion = $"{beforeThink}\n\n{afterThink}";
-                }
-                conclusion = conclusion.Trim();
+                // Use content after think tags if available, otherwise use content before
+                conclusion = !string.IsNullOrEmpty(afterThink) ? afterThink : beforeThink;
+            }
+            else
+            {
+                // No think tags found - use entire response as conclusion
+                conclusion = fullResponse.Trim();
             }
             
             return new AiResponse 

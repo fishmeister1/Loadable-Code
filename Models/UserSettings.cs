@@ -17,7 +17,5 @@ namespace Codeful.Models
         [JsonPropertyName("lastModified")]
         public DateTime LastModified { get; set; } = DateTime.Now;
         
-        // Add more settings here in the future
-        // e.g., Theme, Language, etc.
     }
 }
