@@ -716,18 +716,17 @@ namespace Codeful
             // Only show the conclusion, exclude thinking process
             var displayText = !string.IsNullOrEmpty(response.Conclusion) ? response.Conclusion : "No response received";
 
-            // Add simple plain text block - no formatting
-            var responseText = new TextBlock
+            // Add rich text formatting with instant display
+            var conclusionRichText = new RichTextBox
             {
-                Text = displayText,
-                TextWrapping = TextWrapping.Wrap,
-                FontSize = 14,
-                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1F1F1F")),
-                LineHeight = 20,
-                Margin = new Thickness(0)
+                Style = (Style)FindResource("AiRichTextStyle")
             };
 
-            stackPanel.Children.Add(responseText);
+            // Create and apply formatted document immediately
+            var formattedDocument = CreateFormattedDocument(displayText);
+            conclusionRichText.Document = formattedDocument;
+
+            stackPanel.Children.Add(conclusionRichText);
             
             // Set container child and add to panel once, after all elements are added
             container.Child = stackPanel;
@@ -742,13 +741,311 @@ namespace Codeful
             AddAiResponseWithThinking(response, false);
         }
 
+        private FlowDocument CreateFormattedDocument(string text)
+        {
+            var document = new FlowDocument();
+            
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return document;
+            }
 
+            // Process the text for formatting
+            ProcessTextContent(text, document);
+            
+            return document;
+        }
 
+        private void ProcessTextContent(string text, FlowDocument document)
+        {
+            var lines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.None);
+            var currentParagraph = new Paragraph();
+            var inCodeBlock = false;
+            var codeBlockLines = new List<string>();
+            var codeBlockLanguage = "";
 
-        
+            foreach (var line in lines)
+            {
+                // Check for code block start/end
+                if (line.Trim().StartsWith("```"))
+                {
+                    if (!inCodeBlock)
+                    {
+                        // Starting code block
+                        inCodeBlock = true;
+                        codeBlockLanguage = line.Trim().Substring(3).Trim();
+                        codeBlockLines.Clear();
+                        
+                        // Add current paragraph if it has content
+                        if (currentParagraph.Inlines.Count > 0)
+                        {
+                            document.Blocks.Add(currentParagraph);
+                            currentParagraph = new Paragraph();
+                        }
+                    }
+                    else
+                    {
+                        // Ending code block
+                        inCodeBlock = false;
+                        AddCodeBlock(document, codeBlockLines, codeBlockLanguage);
+                        codeBlockLines.Clear();
+                    }
+                    continue;
+                }
 
+                if (inCodeBlock)
+                {
+                    codeBlockLines.Add(line);
+                }
+                else
+                {
+                    // Check for headers
+                    if (line.Trim().StartsWith("#"))
+                    {
+                        // Add current paragraph if it has content
+                        if (currentParagraph.Inlines.Count > 0)
+                        {
+                            document.Blocks.Add(currentParagraph);
+                            currentParagraph = new Paragraph();
+                        }
+                        
+                        AddHeader(document, line);
+                    }
+                    else if (string.IsNullOrWhiteSpace(line))
+                    {
+                        // Empty line - start new paragraph
+                        if (currentParagraph.Inlines.Count > 0)
+                        {
+                            document.Blocks.Add(currentParagraph);
+                            currentParagraph = new Paragraph();
+                        }
+                    }
+                    else
+                    {
+                        // Regular line with potential inline formatting
+                        ProcessInlineFormatting(line, currentParagraph);
+                        
+                        // Add line break if this isn't the last non-empty line
+                        currentParagraph.Inlines.Add(new LineBreak());
+                    }
+                }
+            }
 
+            // Add final paragraph if it has content
+            if (currentParagraph.Inlines.Count > 0)
+            {
+                // Remove trailing line break if present
+                if (currentParagraph.Inlines.LastInline is LineBreak)
+                {
+                    currentParagraph.Inlines.Remove(currentParagraph.Inlines.LastInline);
+                }
+                document.Blocks.Add(currentParagraph);
+            }
 
+            // Handle unclosed code block
+            if (inCodeBlock && codeBlockLines.Count > 0)
+            {
+                AddCodeBlock(document, codeBlockLines, codeBlockLanguage);
+            }
+        }
 
+        private void AddHeader(FlowDocument document, string headerLine)
+        {
+            var trimmed = headerLine.Trim();
+            var headerLevel = 0;
+            
+            // Count # symbols
+            while (headerLevel < trimmed.Length && trimmed[headerLevel] == '#')
+            {
+                headerLevel++;
+            }
+            
+            var headerText = trimmed.Substring(headerLevel).Trim();
+            
+            var headerParagraph = new Paragraph();
+            var headerRun = new Run(headerText);
+            
+            // Style based on header level
+            switch (headerLevel)
+            {
+                case 1:
+                    headerRun.FontSize = 24;
+                    headerRun.FontWeight = FontWeights.Bold;
+                    break;
+                case 2:
+                    headerRun.FontSize = 20;
+                    headerRun.FontWeight = FontWeights.Bold;
+                    break;
+                case 3:
+                    headerRun.FontSize = 18;
+                    headerRun.FontWeight = FontWeights.Bold;
+                    break;
+                case 4:
+                    headerRun.FontSize = 16;
+                    headerRun.FontWeight = FontWeights.Bold;
+                    break;
+                default:
+                    headerRun.FontSize = 14;
+                    headerRun.FontWeight = FontWeights.Bold;
+                    break;
+            }
+            
+            headerParagraph.Inlines.Add(headerRun);
+            headerParagraph.Margin = new Thickness(0, 8, 0, 4);
+            document.Blocks.Add(headerParagraph);
+        }
+
+        private void AddCodeBlock(FlowDocument document, List<string> codeLines, string language)
+        {
+            if (codeLines.Count == 0)
+                return;
+
+            var codeContent = string.Join(Environment.NewLine, codeLines);
+            
+            var codeContainer = new BlockUIContainer();
+            var codeBorder = new Border
+            {
+                Style = (Style)FindResource("CodeBlockStyle")
+            };
+            
+            var codeTextBlock = new TextBlock
+            {
+                Text = codeContent,
+                FontFamily = new FontFamily("Consolas, Courier New, monospace"),
+                FontSize = 13,
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#24292e")),
+                TextWrapping = TextWrapping.Wrap
+            };
+            
+            codeBorder.Child = codeTextBlock;
+            codeContainer.Child = codeBorder;
+            document.Blocks.Add(codeContainer);
+        }
+
+        private void ProcessInlineFormatting(string text, Paragraph paragraph)
+        {
+            if (string.IsNullOrEmpty(text))
+                return;
+
+            var currentIndex = 0;
+            
+            // Regex for inline formatting: bold, italic, underline, inline code
+            var formattingRegex = new System.Text.RegularExpressions.Regex(
+                @"(`[^`]+`)|" +                     // Inline code: `text`
+                @"(\*\*\*(.+?)\*\*\*)|" +          // Bold + Italic: ***text***
+                @"(___(.+?)___)|" +                 // Bold + Italic: ___text___
+                @"(\*\*(.+?)\*\*)|" +               // Bold: **text**
+                @"(__(.+?)__)|" +                   // Bold: __text__
+                @"(\*(.+?)\*)|" +                   // Italic: *text*
+                @"(_(.+?)_)|" +                     // Italic: _text_
+                @"(<u>(.+?)</u>)"                   // Underline: <u>text</u>
+            );
+            
+            var matches = formattingRegex.Matches(text);
+            
+            foreach (System.Text.RegularExpressions.Match match in matches)
+            {
+                // Add plain text before this match
+                if (match.Index > currentIndex)
+                {
+                    var plainText = text.Substring(currentIndex, match.Index - currentIndex);
+                    if (!string.IsNullOrEmpty(plainText))
+                    {
+                        paragraph.Inlines.Add(new Run(plainText));
+                    }
+                }
+                
+                // Process the matched formatting
+                if (match.Groups[1].Success) // Inline code: `text`
+                {
+                    var codeText = match.Groups[1].Value;
+                    var actualCode = codeText.Substring(1, codeText.Length - 2); // Remove backticks
+                    var codeRun = new Run(actualCode)
+                    {
+                        FontFamily = new FontFamily("Consolas, Courier New, monospace"),
+                        Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#f6f8fa")),
+                        FontSize = 13,
+                        Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#d73a49"))
+                    };
+                    paragraph.Inlines.Add(codeRun);
+                }
+                else if (match.Groups[2].Success) // ***text*** - Bold + Italic
+                {
+                    var run = new Run(match.Groups[3].Value)
+                    {
+                        FontWeight = FontWeights.Bold,
+                        FontStyle = FontStyles.Italic
+                    };
+                    paragraph.Inlines.Add(run);
+                }
+                else if (match.Groups[4].Success) // ___text___ - Bold + Italic
+                {
+                    var run = new Run(match.Groups[5].Value)
+                    {
+                        FontWeight = FontWeights.Bold,
+                        FontStyle = FontStyles.Italic
+                    };
+                    paragraph.Inlines.Add(run);
+                }
+                else if (match.Groups[6].Success) // **text** - Bold
+                {
+                    var run = new Run(match.Groups[7].Value)
+                    {
+                        FontWeight = FontWeights.Bold
+                    };
+                    paragraph.Inlines.Add(run);
+                }
+                else if (match.Groups[8].Success) // __text__ - Bold
+                {
+                    var run = new Run(match.Groups[9].Value)
+                    {
+                        FontWeight = FontWeights.Bold
+                    };
+                    paragraph.Inlines.Add(run);
+                }
+                else if (match.Groups[10].Success) // *text* - Italic
+                {
+                    var run = new Run(match.Groups[11].Value)
+                    {
+                        FontStyle = FontStyles.Italic
+                    };
+                    paragraph.Inlines.Add(run);
+                }
+                else if (match.Groups[12].Success) // _text_ - Italic
+                {
+                    var run = new Run(match.Groups[13].Value)
+                    {
+                        FontStyle = FontStyles.Italic
+                    };
+                    paragraph.Inlines.Add(run);
+                }
+                else if (match.Groups[14].Success) // <u>text</u> - Underline
+                {
+                    var run = new Run(match.Groups[15].Value)
+                    {
+                        TextDecorations = TextDecorations.Underline
+                    };
+                    paragraph.Inlines.Add(run);
+                }
+                
+                currentIndex = match.Index + match.Length;
+            }
+            
+            // Add any remaining plain text after the last match
+            if (currentIndex < text.Length)
+            {
+                var remainingText = text.Substring(currentIndex);
+                if (!string.IsNullOrEmpty(remainingText))
+                {
+                    paragraph.Inlines.Add(new Run(remainingText));
+                }
+            }
+            
+            // If no matches at all, add the entire text as plain text
+            if (matches.Count == 0 && !string.IsNullOrEmpty(text))
+            {
+                paragraph.Inlines.Add(new Run(text));
+            }
+        }
     }
 }
