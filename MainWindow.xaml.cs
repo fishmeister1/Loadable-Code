@@ -170,6 +170,10 @@ namespace Codeful
             }
         }
 
+
+
+
+
         private async Task LoadChatHistoryAsync()
         {
             try
@@ -505,12 +509,15 @@ namespace Codeful
         {
             if (e.Key == Key.Enter)
             {
-                if (Keyboard.Modifiers == ModifierKeys.Shift)
+                if ((Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift)
                 {
-                    // Shift+Enter: Allow new line (don't handle the event)
-                    return;
+                    // Shift+Enter: Insert new line manually since AcceptsReturn is false
+                    e.Handled = true;
+                    int caretIndex = MessageInput.CaretIndex;
+                    MessageInput.Text = MessageInput.Text.Insert(caretIndex, Environment.NewLine);
+                    MessageInput.CaretIndex = caretIndex + Environment.NewLine.Length;
                 }
-                else if (Keyboard.Modifiers == ModifierKeys.None)
+                else
                 {
                     // Enter alone: Send message
                     e.Handled = true;
@@ -716,12 +723,14 @@ namespace Codeful
             };
 
             var stackPanel = new StackPanel();
+            TextBlock? thinkingLabel = null;
+            TextBlock? thinkingText = null;
 
             // Add thinking process if it exists
             if (!string.IsNullOrEmpty(response.ThinkingProcess))
             {
                 // Add bold "Thought Process" label
-                var thinkingLabel = new TextBlock
+                thinkingLabel = new TextBlock
                 {
                     Text = "Thought Process",
                     FontWeight = FontWeights.Bold,
@@ -734,7 +743,7 @@ namespace Codeful
                 stackPanel.Children.Add(thinkingLabel);
 
                 // Add thinking text with typing animation
-                var thinkingText = new TextBlock
+                thinkingText = new TextBlock
                 {
                     Text = animate ? "" : response.ThinkingProcess,
                     Style = (Style)FindResource("ThinkingTextStyle"),
@@ -771,24 +780,15 @@ namespace Codeful
             ChatScrollViewer.ScrollToEnd();
 
             // Animate thinking text if it exists and animate is true
-            if (!string.IsNullOrEmpty(response.ThinkingProcess) && animate)
+            if (!string.IsNullOrEmpty(response.ThinkingProcess) && animate && thinkingText != null)
             {
-                var thinkingText = stackPanel.Children.OfType<TextBlock>()
-                    .FirstOrDefault(tb => tb.Style == (Style)FindResource("ThinkingTextStyle"));
+                await AnimateText(thinkingText, response.ThinkingProcess, 10);
                 
-                if (thinkingText != null)
+                // Hide thinking section after animation completes
+                if (thinkingLabel != null)
                 {
-                    await AnimateText(thinkingText, response.ThinkingProcess, 10);
-                    
-                    // Hide thinking section after animation completes
-                    var thinkingLabel = stackPanel.Children.OfType<TextBlock>()
-                        .FirstOrDefault(tb => tb.Text == "Thought Process");
-                    
-                    if (thinkingLabel != null)
-                    {
-                        thinkingLabel.Visibility = Visibility.Collapsed;
-                        thinkingText.Visibility = Visibility.Collapsed;
-                    }
+                    thinkingLabel.Visibility = Visibility.Collapsed;
+                    thinkingText.Visibility = Visibility.Collapsed;
                 }
             }
             

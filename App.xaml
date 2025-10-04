@@ -17,11 +17,11 @@
         <SolidColorBrush x:Key="SecondaryTextBrush" Color="#6B7280"/>
         
         <!-- Gradients -->
-        <LinearGradientBrush x:Key="AIStarGradient" StartPoint="0,0" EndPoint="1,1">
-            <GradientStop Color="#FF69B4" Offset="0"/>
-            <GradientStop Color="#FF1493" Offset="0.5"/>
-            <GradientStop Color="#FF4500" Offset="1"/>
-        </LinearGradientBrush>
+            <LinearGradientBrush x:Key="AIStarGradient" StartPoint="0,0" EndPoint="1,1">
+                <GradientStop Color="#FF69B4" Offset="0"/>
+                <GradientStop Color="#FF1493" Offset="0.5"/>
+                <GradientStop Color="#FF4500" Offset="1"/>
+            </LinearGradientBrush>
         
         <!-- Drop Shadow Effect -->
         <DropShadowEffect x:Key="WindowDropShadow" 

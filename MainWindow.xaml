@@ -205,7 +205,7 @@
                                      Name="MessageInput"
                                      Style="{StaticResource ChatInputStyle}"
                                      TextWrapping="Wrap"
-                                     AcceptsReturn="True"
+                                     AcceptsReturn="False"
                                      VerticalScrollBarVisibility="Auto"
                                      MaxHeight="120"
                                      FontSize="14"
