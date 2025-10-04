@@ -27,6 +27,9 @@ namespace Codeful
         private readonly SettingsService _settingsService;
         private readonly NotificationService _notificationService;
         private TextBlock? _currentThinkingText;
+        private Border? _loadingIcon;
+        private Border? _delayedMessage;
+        private System.Windows.Threading.DispatcherTimer? _delayedMessageTimer;
         private ChatData _currentChat;
         private List<ChatData> _allChats;
         private UserSettings _userSettings;
@@ -615,11 +618,24 @@ namespace Codeful
                 // Add divider
                 AddDivider();
 
-                // Get AI response with thinking process
+                // Show loading icon (temporarily disabled for testing)
+                // ShowLoadingIcon();
+
+                // Get AI response (thought process will be removed in parsing)
                 var response = await _groqService.SendMessageAsync(messageText, null);
 
-                // Add final AI response - appears instantly
-                AddAiResponseWithThinking(response, false);
+                // Ensure we're on the UI thread for the next operations
+                await Dispatcher.InvokeAsync(async () =>
+                {
+                    // Hide loading icon first (temporarily disabled for testing)
+                    // HideLoadingIcon();
+                    
+                    // Small delay to prevent race conditions
+                    await Task.Delay(10);
+                    
+                    // Add final AI response with proper formatting
+                    AddAiResponseWithThinking(response, false);
+                });
                 
                 // Add AI message to current chat
                 var aiMessage = new ChatMessage
@@ -639,6 +655,8 @@ namespace Codeful
             }
             catch (Exception ex)
             {
+                // Hide loading icon in case of error (temporarily disabled for testing)
+                // HideLoadingIcon();
                 AddAiResponse($"Error: {ex.Message}");
             }
             finally
@@ -706,6 +724,10 @@ namespace Codeful
 
         private void AddAiResponseWithThinking(Services.AiResponse response, bool animate = true)
         {
+            // STEP 2: Show the information (thought process already removed in parsing)
+            var displayText = !string.IsNullOrEmpty(response.Conclusion) ? response.Conclusion : "No response received";
+            
+            // STEP 3: Format the text correctly (only once, after cleanup)
             var container = new Border
             {
                 Style = (Style)FindResource("MessageContainerStyle")
@@ -713,27 +735,28 @@ namespace Codeful
 
             var stackPanel = new StackPanel();
 
-            // Only show the conclusion, exclude thinking process
-            var displayText = !string.IsNullOrEmpty(response.Conclusion) ? response.Conclusion : "No response received";
-
-            // Add rich text formatting with instant display
+            // Create RichTextBox for formatted display
             var conclusionRichText = new RichTextBox
             {
                 Style = (Style)FindResource("AiRichTextStyle"),
                 Focusable = false
             };
 
-            // Create and apply formatted document immediately
+            // Apply formatting to the clean text
             var formattedDocument = CreateFormattedDocument(displayText);
             conclusionRichText.Document = formattedDocument;
 
             stackPanel.Children.Add(conclusionRichText);
-            
-            // Set container child and add to panel once, after all elements are added
             container.Child = stackPanel;
-            ChatMessagesPanel.Children.Add(container);
-            ChatScrollViewer.ScrollToEnd();
+            
+            // Add to UI in a single operation to prevent race conditions
+            Dispatcher.Invoke(() =>
+            {
+                ChatMessagesPanel.Children.Add(container);
+                ChatScrollViewer.ScrollToEnd();
+            });
         }
+
 
         private void AddAiResponse(string text)
         {
@@ -748,11 +771,23 @@ namespace Codeful
             
             if (string.IsNullOrWhiteSpace(text))
             {
+                // Add empty paragraph if no text
+                document.Blocks.Add(new Paragraph(new Run("No content")));
                 return document;
             }
 
-            // Process the text for formatting
-            ProcessTextContent(text, document);
+            // STEP 3: Format the text correctly (single pass only)
+            try
+            {
+                ProcessTextContent(text, document);
+            }
+            catch (Exception ex)
+            {
+                // Fallback for formatting errors
+                document.Blocks.Clear();
+                document.Blocks.Add(new Paragraph(new Run(text)));
+                System.Diagnostics.Debug.WriteLine($"Formatting error: {ex.Message}");
+            }
             
             return document;
         }
@@ -800,19 +835,8 @@ namespace Codeful
                 }
                 else
                 {
-                    // Check for headers
-                    if (line.Trim().StartsWith("#"))
-                    {
-                        // Add current paragraph if it has content
-                        if (currentParagraph.Inlines.Count > 0)
-                        {
-                            document.Blocks.Add(currentParagraph);
-                            currentParagraph = new Paragraph();
-                        }
-                        
-                        AddHeader(document, line);
-                    }
-                    else if (string.IsNullOrWhiteSpace(line))
+                    // Regular line - no special formatting, just plain text
+                    if (string.IsNullOrWhiteSpace(line))
                     {
                         // Empty line - start new paragraph
                         if (currentParagraph.Inlines.Count > 0)
@@ -823,10 +847,8 @@ namespace Codeful
                     }
                     else
                     {
-                        // Regular line with potential inline formatting
-                        ProcessInlineFormatting(line, currentParagraph);
-                        
-                        // Add line break if this isn't the last non-empty line
+                        // Add plain text line
+                        currentParagraph.Inlines.Add(new Run(line));
                         currentParagraph.Inlines.Add(new LineBreak());
                     }
                 }
@@ -850,51 +872,7 @@ namespace Codeful
             }
         }
 
-        private void AddHeader(FlowDocument document, string headerLine)
-        {
-            var trimmed = headerLine.Trim();
-            var headerLevel = 0;
-            
-            // Count # symbols
-            while (headerLevel < trimmed.Length && trimmed[headerLevel] == '#')
-            {
-                headerLevel++;
-            }
-            
-            var headerText = trimmed.Substring(headerLevel).Trim();
-            
-            var headerParagraph = new Paragraph();
-            var headerRun = new Run(headerText);
-            
-            // Style based on header level
-            switch (headerLevel)
-            {
-                case 1:
-                    headerRun.FontSize = 24;
-                    headerRun.FontWeight = FontWeights.Bold;
-                    break;
-                case 2:
-                    headerRun.FontSize = 20;
-                    headerRun.FontWeight = FontWeights.Bold;
-                    break;
-                case 3:
-                    headerRun.FontSize = 18;
-                    headerRun.FontWeight = FontWeights.Bold;
-                    break;
-                case 4:
-                    headerRun.FontSize = 16;
-                    headerRun.FontWeight = FontWeights.Bold;
-                    break;
-                default:
-                    headerRun.FontSize = 14;
-                    headerRun.FontWeight = FontWeights.Bold;
-                    break;
-            }
-            
-            headerParagraph.Inlines.Add(headerRun);
-            headerParagraph.Margin = new Thickness(0, 8, 0, 4);
-            document.Blocks.Add(headerParagraph);
-        }
+
 
         private void AddCodeBlock(FlowDocument document, List<string> codeLines, string language)
         {
@@ -1348,130 +1326,119 @@ namespace Codeful
             }
         }
 
-        private void ProcessInlineFormatting(string text, Paragraph paragraph)
-        {
-            if (string.IsNullOrEmpty(text))
-                return;
 
-            var currentIndex = 0;
-            
-            // Regex for inline formatting: bold, italic, underline, inline code
-            var formattingRegex = new System.Text.RegularExpressions.Regex(
-                @"(`[^`]+`)|" +                     // Inline code: `text`
-                @"(\*\*\*(.+?)\*\*\*)|" +          // Bold + Italic: ***text***
-                @"(___(.+?)___)|" +                 // Bold + Italic: ___text___
-                @"(\*\*(.+?)\*\*)|" +               // Bold: **text**
-                @"(__(.+?)__)|" +                   // Bold: __text__
-                @"(\*(.+?)\*)|" +                   // Italic: *text*
-                @"(_(.+?)_)|" +                     // Italic: _text_
-                @"(<u>(.+?)</u>)"                   // Underline: <u>text</u>
-            );
-            
-            var matches = formattingRegex.Matches(text);
-            
-            foreach (System.Text.RegularExpressions.Match match in matches)
+
+        private void ShowLoadingIcon()
+        {
+            // Create loading icon
+            var loadingBorder = new Border
             {
-                // Add plain text before this match
-                if (match.Index > currentIndex)
+                Style = (Style)FindResource("LoadingIconStyle")
+            };
+
+            // Create container for the loading icon (similar to AI response container)
+            var container = new Border
+            {
+                Style = (Style)FindResource("LoadingContainerStyle")
+            };
+
+            container.Child = loadingBorder;
+            
+            // Store reference to remove later
+            _loadingIcon = container;
+            
+            // Add to chat panel
+            ChatMessagesPanel.Children.Add(container);
+            ChatScrollViewer.ScrollToEnd();
+            
+            // Start timer for delayed message
+            StartDelayedMessageTimer();
+        }
+
+        private void HideLoadingIcon()
+        {
+            Dispatcher.Invoke(() =>
+            {
+                // Stop and cleanup timer
+                StopDelayedMessageTimer();
+                
+                // Remove delayed message if it exists
+                if (_delayedMessage != null)
                 {
-                    var plainText = text.Substring(currentIndex, match.Index - currentIndex);
-                    if (!string.IsNullOrEmpty(plainText))
+                    if (ChatMessagesPanel.Children.Contains(_delayedMessage))
                     {
-                        paragraph.Inlines.Add(new Run(plainText));
+                        ChatMessagesPanel.Children.Remove(_delayedMessage);
                     }
+                    _delayedMessage = null;
                 }
                 
-                // Process the matched formatting
-                if (match.Groups[1].Success) // Inline code: `text`
+                // Remove loading icon
+                if (_loadingIcon != null)
                 {
-                    var codeText = match.Groups[1].Value;
-                    var actualCode = codeText.Substring(1, codeText.Length - 2); // Remove backticks
-                    var codeRun = new Run(actualCode)
+                    if (ChatMessagesPanel.Children.Contains(_loadingIcon))
                     {
-                        FontFamily = new FontFamily("Consolas, Courier New, monospace"),
-                        Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#f6f8fa")),
-                        FontSize = 13,
-                        Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#d73a49"))
-                    };
-                    paragraph.Inlines.Add(codeRun);
-                }
-                else if (match.Groups[2].Success) // ***text*** - Bold + Italic
-                {
-                    var run = new Run(match.Groups[3].Value)
-                    {
-                        FontWeight = FontWeights.Bold,
-                        FontStyle = FontStyles.Italic
-                    };
-                    paragraph.Inlines.Add(run);
-                }
-                else if (match.Groups[4].Success) // ___text___ - Bold + Italic
-                {
-                    var run = new Run(match.Groups[5].Value)
-                    {
-                        FontWeight = FontWeights.Bold,
-                        FontStyle = FontStyles.Italic
-                    };
-                    paragraph.Inlines.Add(run);
-                }
-                else if (match.Groups[6].Success) // **text** - Bold
-                {
-                    var run = new Run(match.Groups[7].Value)
-                    {
-                        FontWeight = FontWeights.Bold
-                    };
-                    paragraph.Inlines.Add(run);
-                }
-                else if (match.Groups[8].Success) // __text__ - Bold
-                {
-                    var run = new Run(match.Groups[9].Value)
-                    {
-                        FontWeight = FontWeights.Bold
-                    };
-                    paragraph.Inlines.Add(run);
-                }
-                else if (match.Groups[10].Success) // *text* - Italic
-                {
-                    var run = new Run(match.Groups[11].Value)
-                    {
-                        FontStyle = FontStyles.Italic
-                    };
-                    paragraph.Inlines.Add(run);
-                }
-                else if (match.Groups[12].Success) // _text_ - Italic
-                {
-                    var run = new Run(match.Groups[13].Value)
-                    {
-                        FontStyle = FontStyles.Italic
-                    };
-                    paragraph.Inlines.Add(run);
-                }
-                else if (match.Groups[14].Success) // <u>text</u> - Underline
-                {
-                    var run = new Run(match.Groups[15].Value)
-                    {
-                        TextDecorations = TextDecorations.Underline
-                    };
-                    paragraph.Inlines.Add(run);
+                        ChatMessagesPanel.Children.Remove(_loadingIcon);
+                    }
+                    _loadingIcon = null;
                 }
                 
-                currentIndex = match.Index + match.Length;
-            }
-            
-            // Add any remaining plain text after the last match
-            if (currentIndex < text.Length)
+                // Force layout update
+                ChatMessagesPanel.UpdateLayout();
+            });
+        }
+
+        private void StartDelayedMessageTimer()
+        {
+            _delayedMessageTimer = new System.Windows.Threading.DispatcherTimer
             {
-                var remainingText = text.Substring(currentIndex);
-                if (!string.IsNullOrEmpty(remainingText))
-                {
-                    paragraph.Inlines.Add(new Run(remainingText));
-                }
-            }
+                Interval = TimeSpan.FromMilliseconds(2000)
+            };
             
-            // If no matches at all, add the entire text as plain text
-            if (matches.Count == 0 && !string.IsNullOrEmpty(text))
+            _delayedMessageTimer.Tick += (s, e) =>
             {
-                paragraph.Inlines.Add(new Run(text));
+                ShowDelayedMessage();
+                _delayedMessageTimer?.Stop();
+            };
+            
+            _delayedMessageTimer.Start();
+        }
+
+        private void StopDelayedMessageTimer()
+        {
+            if (_delayedMessageTimer != null)
+            {
+                _delayedMessageTimer.Stop();
+                _delayedMessageTimer = null;
             }
+        }
+
+        private void ShowDelayedMessage()
+        {
+            if (_delayedMessage != null) return; // Already shown
+            
+            // Create delayed message text
+            var messageText = new TextBlock
+            {
+                Text = "This could take a minute...",
+                FontSize = 10,
+                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#6B7280")),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, 5, 0, 0)
+            };
+            
+            // Create container for the message
+            var messageContainer = new Border
+            {
+                Background = Brushes.Transparent,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Child = messageText
+            };
+            
+            _delayedMessage = messageContainer;
+            
+            // Add to chat panel
+            ChatMessagesPanel.Children.Add(messageContainer);
+            ChatScrollViewer.ScrollToEnd();
         }
     }
 }

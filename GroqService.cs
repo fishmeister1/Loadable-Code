@@ -146,36 +146,41 @@ When responding:
 
         private AiResponse ParseResponse(string fullResponse)
         {
+            // Handle null response
+            if (string.IsNullOrEmpty(fullResponse))
+            {
+                return new AiResponse { Conclusion = "No response received" };
+            }
+            
+            // STEP 1: Remove the thought process text FIRST
+            string cleanedResponse = RemoveThoughtProcess(fullResponse);
+            
+            // STEP 2: Return the cleaned information (no formatting yet)
+            return new AiResponse 
+            { 
+                ThinkingProcess = "", // Always empty since we removed it
+                Conclusion = string.IsNullOrEmpty(cleanedResponse) ? "No response provided" : cleanedResponse 
+            };
+        }
+        
+        private string RemoveThoughtProcess(string fullResponse)
+        {
             var thinkStart = fullResponse.IndexOf("<think>");
             var thinkEnd = fullResponse.IndexOf("</think>");
             
-            string thinkingText = "";
-            string conclusion = "";
-            
             if (thinkStart != -1 && thinkEnd != -1 && thinkEnd > thinkStart)
             {
-                // Extract thinking text (but we won't display it)
-                thinkingText = fullResponse.Substring(thinkStart + 7, thinkEnd - thinkStart - 7).Trim();
-                
-                // Extract conclusion (everything after thinking tags)
+                // Extract only the content after thinking tags
                 var afterThink = fullResponse.Substring(thinkEnd + 8).Trim();
-                var beforeThink = fullResponse.Substring(0, thinkStart).Trim();
-                
-                // Use content after think tags if available, otherwise use content before
-                conclusion = !string.IsNullOrEmpty(afterThink) ? afterThink : beforeThink;
+                return afterThink;
             }
             else
             {
-                // No think tags found - use entire response as conclusion
-                conclusion = fullResponse.Trim();
+                // No think tags found - return entire response
+                return fullResponse.Trim();
             }
-            
-            return new AiResponse 
-            { 
-                ThinkingProcess = thinkingText, 
-                Conclusion = string.IsNullOrEmpty(conclusion) ? "No conclusion provided" : conclusion 
-            };
         }
+
 
         public void Dispose()
         {

@@ -63,6 +63,58 @@
             <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Disabled"/>
             <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
         </Style>
+        
+        <!-- Loading Animation Gradient Brush -->
+        <LinearGradientBrush x:Key="LoadingGradient" StartPoint="0,0" EndPoint="1,1">
+            <GradientStop Color="#FF69B4" Offset="0"/>    <!-- Pink -->
+            <GradientStop Color="#FF1493" Offset="0.5"/>  <!-- Deep Pink/Red -->
+            <GradientStop Color="#FF4500" Offset="1"/>    <!-- Orange Red -->
+        </LinearGradientBrush>
+        
+        <!-- Loading Icon Glow Effect -->
+        <DropShadowEffect x:Key="LoadingGlowEffect"
+                          BlurRadius="20"
+                          ShadowDepth="0"
+                          Color="#FF69B4"
+                          Opacity="0.8"/>
+
+        <!-- Loading Animation Style -->
+        <Style x:Key="LoadingIconStyle" TargetType="Border">
+            <Setter Property="Width" Value="50"/>
+            <Setter Property="Height" Value="50"/>
+            <Setter Property="BorderBrush" Value="{StaticResource LoadingGradient}"/>
+            <Setter Property="BorderThickness" Value="3"/>
+            <Setter Property="CornerRadius" Value="25"/>
+            <Setter Property="Effect" Value="{StaticResource LoadingGlowEffect}"/>
+            <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
+            <Setter Property="RenderTransform">
+                <Setter.Value>
+                    <RotateTransform Angle="0"/>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsVisible" Value="True">
+                    <Trigger.EnterActions>
+                        <BeginStoryboard>
+                            <Storyboard RepeatBehavior="Forever">
+                                <DoubleAnimation 
+                                    Storyboard.TargetProperty="(Border.RenderTransform).(RotateTransform.Angle)"
+                                    From="0" To="360" Duration="0:0:1" />
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </Trigger.EnterActions>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Loading Container Style -->
+        <Style x:Key="LoadingContainerStyle" TargetType="Border">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Padding" Value="20"/>
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="VerticalAlignment" Value="Top"/>
+        </Style>
+
         <!-- Icon Button Style -->
         <Style x:Key="IconButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
