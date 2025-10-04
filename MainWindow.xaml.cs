@@ -618,8 +618,8 @@ namespace Codeful
                 // Add divider
                 AddDivider();
 
-                // Show loading icon (temporarily disabled for testing)
-                // ShowLoadingIcon();
+                // Show loading icon
+                ShowLoadingIcon();
 
                 // Get AI response (thought process will be removed in parsing)
                 var response = await _groqService.SendMessageAsync(messageText, null);
@@ -627,8 +627,8 @@ namespace Codeful
                 // Ensure we're on the UI thread for the next operations
                 await Dispatcher.InvokeAsync(async () =>
                 {
-                    // Hide loading icon first (temporarily disabled for testing)
-                    // HideLoadingIcon();
+                    // Hide loading icon first
+                    HideLoadingIcon();
                     
                     // Small delay to prevent race conditions
                     await Task.Delay(10);
@@ -655,8 +655,8 @@ namespace Codeful
             }
             catch (Exception ex)
             {
-                // Hide loading icon in case of error (temporarily disabled for testing)
-                // HideLoadingIcon();
+                // Hide loading icon in case of error
+                HideLoadingIcon();
                 AddAiResponse($"Error: {ex.Message}");
             }
             finally
