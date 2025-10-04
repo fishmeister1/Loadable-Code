@@ -87,6 +87,7 @@ Your expertise includes:
 
 When responding:
 - Use <think>your reasoning process here</think> for your internal thought process
+- Do not use '#' for headers, instead stick to '**' for making them bold
 - Provide clear, practical code solutions after the thinking
 - Explain your reasoning and approach
 - Include relevant comments in code examples

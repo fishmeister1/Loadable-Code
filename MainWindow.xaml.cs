@@ -847,8 +847,8 @@ namespace Codeful
                     }
                     else
                     {
-                        // Add plain text line
-                        currentParagraph.Inlines.Add(new Run(line));
+                        // Process line for bold formatting only
+                        ProcessBoldFormatting(line, currentParagraph);
                         currentParagraph.Inlines.Add(new LineBreak());
                     }
                 }
@@ -1327,6 +1327,54 @@ namespace Codeful
         }
 
 
+
+        private void ProcessBoldFormatting(string text, Paragraph paragraph)
+        {
+            if (string.IsNullOrEmpty(text))
+                return;
+
+            var currentIndex = 0;
+            
+            // Simple regex for bold formatting: **text** or __text__
+            var boldRegex = new System.Text.RegularExpressions.Regex(@"\*\*([^*]+)\*\*|__([^_]+)__");
+            var matches = boldRegex.Matches(text);
+            
+            if (matches.Count == 0)
+            {
+                // No bold formatting found - add as plain text
+                paragraph.Inlines.Add(new Run(text));
+                return;
+            }
+            
+            foreach (System.Text.RegularExpressions.Match match in matches)
+            {
+                // Add plain text before this match
+                if (match.Index > currentIndex)
+                {
+                    var plainText = text.Substring(currentIndex, match.Index - currentIndex);
+                    paragraph.Inlines.Add(new Run(plainText));
+                }
+                
+                // Get the bold text (from either group 1 or 2)
+                var boldText = !string.IsNullOrEmpty(match.Groups[1].Value) ? match.Groups[1].Value : match.Groups[2].Value;
+                
+                // Add bold text
+                var boldRun = new Run(boldText)
+                {
+                    FontWeight = FontWeights.Bold
+                };
+                paragraph.Inlines.Add(boldRun);
+                
+                currentIndex = match.Index + match.Length;
+            }
+            
+            // Add any remaining plain text after the last match
+            if (currentIndex < text.Length)
+            {
+                var remainingText = text.Substring(currentIndex);
+                paragraph.Inlines.Add(new Run(remainingText));
+            }
+        }
 
         private void ShowLoadingIcon()
         {
