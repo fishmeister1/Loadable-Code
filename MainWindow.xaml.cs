@@ -908,18 +908,311 @@ namespace Codeful
                 Style = (Style)FindResource("CodeBlockStyle")
             };
             
-            var codeTextBlock = new TextBlock
+            // Create a RichTextBox for syntax highlighting
+            var codeRichTextBox = new RichTextBox
             {
-                Text = codeContent,
                 FontFamily = new FontFamily("Consolas, Courier New, monospace"),
                 FontSize = 13,
-                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#24292e")),
-                TextWrapping = TextWrapping.Wrap
+                Background = Brushes.Transparent,
+                BorderThickness = new Thickness(0),
+                IsReadOnly = true,
+                IsTabStop = false
             };
             
-            codeBorder.Child = codeTextBlock;
+            ScrollViewer.SetVerticalScrollBarVisibility(codeRichTextBox, ScrollBarVisibility.Disabled);
+            ScrollViewer.SetHorizontalScrollBarVisibility(codeRichTextBox, ScrollBarVisibility.Disabled);
+            
+            // Apply syntax highlighting
+            var highlightedDocument = ApplySyntaxHighlighting(codeContent, language.ToLower());
+            codeRichTextBox.Document = highlightedDocument;
+            
+            codeBorder.Child = codeRichTextBox;
             codeContainer.Child = codeBorder;
             document.Blocks.Add(codeContainer);
+        }
+
+        private FlowDocument ApplySyntaxHighlighting(string code, string language)
+        {
+            var document = new FlowDocument();
+            var paragraph = new Paragraph();
+            
+            if (string.IsNullOrEmpty(code))
+            {
+                document.Blocks.Add(paragraph);
+                return document;
+            }
+
+            switch (language.ToLower())
+            {
+                case "csharp":
+                case "c#":
+                case "cs":
+                    HighlightCSharp(code, paragraph);
+                    break;
+                case "javascript":
+                case "js":
+                    HighlightJavaScript(code, paragraph);
+                    break;
+                case "python":
+                case "py":
+                    HighlightPython(code, paragraph);
+                    break;
+                case "html":
+                    HighlightHtml(code, paragraph);
+                    break;
+                case "css":
+                    HighlightCss(code, paragraph);
+                    break;
+                case "json":
+                    HighlightJson(code, paragraph);
+                    break;
+                case "xml":
+                    HighlightXml(code, paragraph);
+                    break;
+                case "sql":
+                    HighlightSql(code, paragraph);
+                    break;
+                default:
+                    // Default highlighting for unknown languages
+                    HighlightGeneric(code, paragraph);
+                    break;
+            }
+            
+            document.Blocks.Add(paragraph);
+            return document;
+        }
+
+        private void HighlightCSharp(string code, Paragraph paragraph)
+        {
+            var keywords = new[] { "abstract", "as", "base", "bool", "break", "byte", "case", "catch", "char", 
+                "checked", "class", "const", "continue", "decimal", "default", "delegate", "do", "double", 
+                "else", "enum", "event", "explicit", "extern", "false", "finally", "fixed", "float", "for", 
+                "foreach", "goto", "if", "implicit", "in", "int", "interface", "internal", "is", "lock", 
+                "long", "namespace", "new", "null", "object", "operator", "out", "override", "params", 
+                "private", "protected", "public", "readonly", "ref", "return", "sbyte", "sealed", "short", 
+                "sizeof", "stackalloc", "static", "string", "struct", "switch", "this", "throw", "true", 
+                "try", "typeof", "uint", "ulong", "unchecked", "unsafe", "ushort", "using", "virtual", 
+                "void", "volatile", "while" };
+            
+            HighlightWithKeywords(code, paragraph, keywords, "#0000FF", "#008000", "#FF0000");
+        }
+
+        private void HighlightJavaScript(string code, Paragraph paragraph)
+        {
+            var keywords = new[] { "abstract", "await", "boolean", "break", "byte", "case", "catch", "char", 
+                "class", "const", "continue", "debugger", "default", "delete", "do", "double", "else", 
+                "enum", "export", "extends", "false", "final", "finally", "float", "for", "function", 
+                "goto", "if", "implements", "import", "in", "instanceof", "int", "interface", "let", 
+                "long", "native", "new", "null", "package", "private", "protected", "public", "return", 
+                "short", "static", "super", "switch", "synchronized", "this", "throw", "throws", "transient", 
+                "true", "try", "typeof", "var", "void", "volatile", "while", "with", "yield" };
+            
+            HighlightWithKeywords(code, paragraph, keywords, "#0000FF", "#008000", "#FF0000");
+        }
+
+        private void HighlightPython(string code, Paragraph paragraph)
+        {
+            var keywords = new[] { "and", "as", "assert", "break", "class", "continue", "def", "del", "elif", 
+                "else", "except", "exec", "finally", "for", "from", "global", "if", "import", "in", "is", 
+                "lambda", "not", "or", "pass", "print", "raise", "return", "try", "while", "with", "yield", 
+                "False", "None", "True" };
+            
+            HighlightWithKeywords(code, paragraph, keywords, "#0000FF", "#008000", "#FF0000");
+        }
+
+        private void HighlightHtml(string code, Paragraph paragraph)
+        {
+            var currentIndex = 0;
+            var tagRegex = new System.Text.RegularExpressions.Regex(@"<[^>]+>");
+            var matches = tagRegex.Matches(code);
+
+            foreach (System.Text.RegularExpressions.Match match in matches)
+            {
+                // Add text before tag
+                if (match.Index > currentIndex)
+                {
+                    var beforeText = code.Substring(currentIndex, match.Index - currentIndex);
+                    paragraph.Inlines.Add(new Run(beforeText) { Foreground = new SolidColorBrush(Colors.Black) });
+                }
+
+                // Add highlighted tag
+                paragraph.Inlines.Add(new Run(match.Value) { Foreground = new SolidColorBrush(Colors.Blue) });
+                currentIndex = match.Index + match.Length;
+            }
+
+            // Add remaining text
+            if (currentIndex < code.Length)
+            {
+                paragraph.Inlines.Add(new Run(code.Substring(currentIndex)) { Foreground = new SolidColorBrush(Colors.Black) });
+            }
+        }
+
+        private void HighlightCss(string code, Paragraph paragraph)
+        {
+            var properties = new[] { "color", "background", "font-size", "margin", "padding", "border", 
+                "width", "height", "display", "position", "top", "left", "right", "bottom", "float", 
+                "clear", "overflow", "text-align", "font-family", "font-weight" };
+            
+            HighlightWithKeywords(code, paragraph, properties, "#800080", "#008000", "#FF0000");
+        }
+
+        private void HighlightJson(string code, Paragraph paragraph)
+        {
+            var currentIndex = 0;
+            var stringRegex = new System.Text.RegularExpressions.Regex(@"""[^""\\]*(?:\\.[^""\\]*)*""");
+            var numberRegex = new System.Text.RegularExpressions.Regex(@"\b\d+(?:\.\d+)?\b");
+            var booleanRegex = new System.Text.RegularExpressions.Regex(@"\b(true|false|null)\b");
+
+            var allMatches = new List<(int Index, int Length, string Type, string Value)>();
+
+            foreach (System.Text.RegularExpressions.Match match in stringRegex.Matches(code))
+                allMatches.Add((match.Index, match.Length, "string", match.Value));
+            
+            foreach (System.Text.RegularExpressions.Match match in numberRegex.Matches(code))
+                allMatches.Add((match.Index, match.Length, "number", match.Value));
+            
+            foreach (System.Text.RegularExpressions.Match match in booleanRegex.Matches(code))
+                allMatches.Add((match.Index, match.Length, "boolean", match.Value));
+
+            allMatches.Sort((a, b) => a.Index.CompareTo(b.Index));
+
+            foreach (var match in allMatches)
+            {
+                if (match.Index > currentIndex)
+                {
+                    var beforeText = code.Substring(currentIndex, match.Index - currentIndex);
+                    paragraph.Inlines.Add(new Run(beforeText) { Foreground = new SolidColorBrush(Colors.Black) });
+                }
+
+                Color color = match.Type switch
+                {
+                    "string" => Colors.Red,
+                    "number" => Colors.Blue,
+                    "boolean" => Colors.Purple,
+                    _ => Colors.Black
+                };
+
+                paragraph.Inlines.Add(new Run(match.Value) { Foreground = new SolidColorBrush(color) });
+                currentIndex = match.Index + match.Length;
+            }
+
+            if (currentIndex < code.Length)
+            {
+                paragraph.Inlines.Add(new Run(code.Substring(currentIndex)) { Foreground = new SolidColorBrush(Colors.Black) });
+            }
+        }
+
+        private void HighlightXml(string code, Paragraph paragraph)
+        {
+            HighlightHtml(code, paragraph); // XML uses similar highlighting to HTML
+        }
+
+        private void HighlightSql(string code, Paragraph paragraph)
+        {
+            var keywords = new[] { "SELECT", "FROM", "WHERE", "INSERT", "UPDATE", "DELETE", "CREATE", "ALTER", 
+                "DROP", "TABLE", "INDEX", "VIEW", "DATABASE", "SCHEMA", "PROCEDURE", "FUNCTION", "TRIGGER", 
+                "JOIN", "INNER", "LEFT", "RIGHT", "FULL", "OUTER", "ON", "AS", "AND", "OR", "NOT", "NULL", 
+                "IS", "IN", "BETWEEN", "LIKE", "ORDER", "BY", "GROUP", "HAVING", "DISTINCT", "TOP", "LIMIT" };
+            
+            HighlightWithKeywords(code, paragraph, keywords, "#0000FF", "#008000", "#FF0000");
+        }
+
+        private void HighlightGeneric(string code, Paragraph paragraph)
+        {
+            // Basic highlighting for unknown languages
+            var stringRegex = new System.Text.RegularExpressions.Regex(@"""[^""\\]*(?:\\.[^""\\]*)*""|'[^'\\]*(?:\\.[^'\\]*)*'");
+            var commentRegex = new System.Text.RegularExpressions.Regex(@"//.*$|/\*[\s\S]*?\*/|#.*$", System.Text.RegularExpressions.RegexOptions.Multiline);
+            
+            var allMatches = new List<(int Index, int Length, string Type)>();
+            
+            foreach (System.Text.RegularExpressions.Match match in stringRegex.Matches(code))
+                allMatches.Add((match.Index, match.Length, "string"));
+            
+            foreach (System.Text.RegularExpressions.Match match in commentRegex.Matches(code))
+                allMatches.Add((match.Index, match.Length, "comment"));
+
+            allMatches.Sort((a, b) => a.Index.CompareTo(b.Index));
+
+            var currentIndex = 0;
+            foreach (var match in allMatches)
+            {
+                if (match.Index > currentIndex)
+                {
+                    var beforeText = code.Substring(currentIndex, match.Index - currentIndex);
+                    paragraph.Inlines.Add(new Run(beforeText) { Foreground = new SolidColorBrush(Colors.Black) });
+                }
+
+                Color color = match.Type == "string" ? Colors.Red : Colors.Green;
+                var matchText = code.Substring(match.Index, match.Length);
+                paragraph.Inlines.Add(new Run(matchText) { Foreground = new SolidColorBrush(color) });
+                
+                currentIndex = match.Index + match.Length;
+            }
+
+            if (currentIndex < code.Length)
+            {
+                paragraph.Inlines.Add(new Run(code.Substring(currentIndex)) { Foreground = new SolidColorBrush(Colors.Black) });
+            }
+        }
+
+        private void HighlightWithKeywords(string code, Paragraph paragraph, string[] keywords, string keywordColor, string commentColor, string stringColor)
+        {
+            var keywordRegex = new System.Text.RegularExpressions.Regex(@"\b(" + string.Join("|", keywords) + @")\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            var stringRegex = new System.Text.RegularExpressions.Regex(@"""[^""\\]*(?:\\.[^""\\]*)*""|'[^'\\]*(?:\\.[^'\\]*)*'");
+            var commentRegex = new System.Text.RegularExpressions.Regex(@"//.*$|/\*[\s\S]*?\*/", System.Text.RegularExpressions.RegexOptions.Multiline);
+
+            var allMatches = new List<(int Index, int Length, string Type)>();
+
+            foreach (System.Text.RegularExpressions.Match match in keywordRegex.Matches(code))
+                allMatches.Add((match.Index, match.Length, "keyword"));
+            
+            foreach (System.Text.RegularExpressions.Match match in stringRegex.Matches(code))
+                allMatches.Add((match.Index, match.Length, "string"));
+            
+            foreach (System.Text.RegularExpressions.Match match in commentRegex.Matches(code))
+                allMatches.Add((match.Index, match.Length, "comment"));
+
+            // Sort by position and remove overlaps
+            allMatches.Sort((a, b) => a.Index.CompareTo(b.Index));
+            var nonOverlapping = new List<(int Index, int Length, string Type)>();
+            var lastEnd = 0;
+
+            foreach (var match in allMatches)
+            {
+                if (match.Index >= lastEnd)
+                {
+                    nonOverlapping.Add(match);
+                    lastEnd = match.Index + match.Length;
+                }
+            }
+
+            var currentIndex = 0;
+            foreach (var match in nonOverlapping)
+            {
+                if (match.Index > currentIndex)
+                {
+                    var beforeText = code.Substring(currentIndex, match.Index - currentIndex);
+                    paragraph.Inlines.Add(new Run(beforeText) { Foreground = new SolidColorBrush(Colors.Black) });
+                }
+
+                Color color = match.Type switch
+                {
+                    "keyword" => (Color)ColorConverter.ConvertFromString(keywordColor),
+                    "string" => (Color)ColorConverter.ConvertFromString(stringColor),
+                    "comment" => (Color)ColorConverter.ConvertFromString(commentColor),
+                    _ => Colors.Black
+                };
+
+                var matchText = code.Substring(match.Index, match.Length);
+                paragraph.Inlines.Add(new Run(matchText) { Foreground = new SolidColorBrush(color) });
+                
+                currentIndex = match.Index + match.Length;
+            }
+
+            if (currentIndex < code.Length)
+            {
+                paragraph.Inlines.Add(new Run(code.Substring(currentIndex)) { Foreground = new SolidColorBrush(Colors.Black) });
+            }
         }
 
         private void ProcessInlineFormatting(string text, Paragraph paragraph)
