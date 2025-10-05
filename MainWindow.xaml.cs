@@ -38,6 +38,10 @@ namespace Codeful
         public MainWindow()
         {
             InitializeComponent();
+            
+            // Ensure styles are available in compiled version
+            EnsureStylesAvailable();
+            
             _groqService = new GroqService();
             _chatStorage = new ChatStorageService();
             _settingsService = new SettingsService();
@@ -728,19 +732,49 @@ namespace Codeful
             var displayText = !string.IsNullOrEmpty(response.Conclusion) ? response.Conclusion : "No response received";
             
             // STEP 3: Format the text correctly (only once, after cleanup)
-            var container = new Border
+            var container = new Border();
+            
+            // Try to apply style, with fallback if not found
+            try
             {
-                Style = (Style)FindResource("MessageContainerStyle")
-            };
+                container.Style = (Style)FindResource("MessageContainerStyle");
+            }
+            catch (ResourceReferenceKeyNotFoundException)
+            {
+                // Fallback styling if resource not found
+                container.Background = Brushes.Transparent;
+                container.Margin = new Thickness(0, 8, 0, 8);
+                container.Padding = new Thickness(16, 16, 16, 16);
+            }
 
             var stackPanel = new StackPanel();
 
             // Create RichTextBox for formatted display
             var conclusionRichText = new RichTextBox
             {
-                Style = (Style)FindResource("AiRichTextStyle"),
                 Focusable = false
             };
+            
+            // Try to apply style, with fallback if not found
+            try
+            {
+                conclusionRichText.Style = (Style)FindResource("AiRichTextStyle");
+            }
+            catch (ResourceReferenceKeyNotFoundException)
+            {
+                // Fallback styling if resource not found
+                conclusionRichText.FontFamily = new FontFamily("Segoe UI");
+                conclusionRichText.FontSize = 14;
+                conclusionRichText.Background = Brushes.Transparent;
+                conclusionRichText.BorderThickness = new Thickness(0);
+                conclusionRichText.Padding = new Thickness(0);
+                conclusionRichText.Margin = new Thickness(0);
+                conclusionRichText.IsReadOnly = true;
+                conclusionRichText.IsDocumentEnabled = true;
+                conclusionRichText.IsTabStop = false;
+                ScrollViewer.SetVerticalScrollBarVisibility(conclusionRichText, ScrollBarVisibility.Disabled);
+                ScrollViewer.SetHorizontalScrollBarVisibility(conclusionRichText, ScrollBarVisibility.Disabled);
+            }
 
             // Apply formatting to the clean text
             var formattedDocument = CreateFormattedDocument(displayText);
@@ -763,6 +797,22 @@ namespace Codeful
             // Fallback method for simple text responses
             var response = new Services.AiResponse { Conclusion = text };
             AddAiResponseWithThinking(response, false);
+        }
+        
+        private void EnsureStylesAvailable()
+        {
+            try
+            {
+                // Test if key styles are available
+                _ = FindResource("AiRichTextStyle");
+                _ = FindResource("MessageContainerStyle");
+                _ = FindResource("LoadingIconStyle");
+            }
+            catch (ResourceReferenceKeyNotFoundException ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Missing resource in compiled version: {ex.Message}");
+                // Resources will be handled by fallback code in individual methods
+            }
         }
 
         private FlowDocument CreateFormattedDocument(string text)
@@ -1379,16 +1429,48 @@ namespace Codeful
         private void ShowLoadingIcon()
         {
             // Create loading icon
-            var loadingBorder = new Border
+            var loadingBorder = new Border();
+            
+            // Try to apply style, with fallback if not found
+            try
             {
-                Style = (Style)FindResource("LoadingIconStyle")
-            };
+                loadingBorder.Style = (Style)FindResource("LoadingIconStyle");
+            }
+            catch (ResourceReferenceKeyNotFoundException)
+            {
+                // Fallback styling if resource not found
+                loadingBorder.Width = 50;
+                loadingBorder.Height = 50;
+                loadingBorder.BorderThickness = new Thickness(3, 3, 3, 3);
+                loadingBorder.CornerRadius = new CornerRadius(25);
+                loadingBorder.RenderTransformOrigin = new Point(0.5, 0.5);
+                loadingBorder.RenderTransform = new RotateTransform(0);
+                
+                // Create gradient brush manually
+                var gradientBrush = new LinearGradientBrush();
+                gradientBrush.StartPoint = new Point(0, 0);
+                gradientBrush.EndPoint = new Point(1, 1);
+                gradientBrush.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#FF69B4"), 0));
+                gradientBrush.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#FF1493"), 0.5));
+                gradientBrush.GradientStops.Add(new GradientStop((Color)ColorConverter.ConvertFromString("#FF4500"), 1));
+                loadingBorder.BorderBrush = gradientBrush;
+            }
 
-            // Create container for the loading icon (similar to AI response container)
-            var container = new Border
+            // Create container for the loading icon
+            var container = new Border();
+            
+            try
             {
-                Style = (Style)FindResource("LoadingContainerStyle")
-            };
+                container.Style = (Style)FindResource("LoadingContainerStyle");
+            }
+            catch (ResourceReferenceKeyNotFoundException)
+            {
+                // Fallback styling if resource not found
+                container.Background = Brushes.Transparent;
+                container.Padding = new Thickness(20, 20, 20, 20);
+                container.HorizontalAlignment = HorizontalAlignment.Center;
+                container.VerticalAlignment = VerticalAlignment.Top;
+            }
 
             container.Child = loadingBorder;
             
